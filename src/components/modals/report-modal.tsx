@@ -1,8 +1,17 @@
 "use client";
-import { overlay, modal } from "./report-modal.css";
+import {
+  overlay,
+  modal,
+  imageContainer,
+  imagePreview,
+  previewImage,
+  deleteButton,
+  fileName,
+  scrollContainer,
+} from "./report-modal.css";
 import { useState } from "react";
 import React from "react";
-import { Box, Button, Textarea } from "@vapor-ui/core";
+import { Box, Button, Textarea, Flex } from "@vapor-ui/core";
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -40,6 +49,12 @@ export const ReportModal = ({
     setSelectedImages(files);
   };
 
+  const removeImage = (indexToRemove: number) => {
+    setSelectedImages(
+      selectedImages.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
   const handleReport = () => {
     const reportData: ReportData = {
       description,
@@ -70,12 +85,28 @@ export const ReportModal = ({
           accept="image/*"
           onChange={handleFileChange}
         />
+
         {selectedImages.length > 0 && (
-          <div>
+          <Flex gap="$200" className={scrollContainer}>
             {selectedImages.map((file, index) => (
-              <p key={index}>{file.name}</p>
+              <div key={index} className={imageContainer}>
+                <div className={imagePreview}>
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={`Preview ${index + 1}`}
+                    className={previewImage}
+                  />
+                </div>
+                <button
+                  onClick={() => removeImage(index)}
+                  className={deleteButton}
+                >
+                  ×
+                </button>
+                <div className={fileName}>{file.name}</div>
+              </div>
             ))}
-          </div>
+          </Flex>
         )}
         <Box
           display="flex"
