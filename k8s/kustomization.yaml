@@ -1,0 +1,7 @@
+resources:
+  - front.yaml
+
+configMapGenerator:
+  - name: front-config
+    files:
+      - config/config.json
