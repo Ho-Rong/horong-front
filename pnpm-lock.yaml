@@ -18,11 +18,14 @@ importers:
         specifier: ^1.6.5
         version: 1.6.5(@vanilla-extract/css@1.17.4)
       '@vapor-ui/core':
-        specifier: 1.0.0-beta.0
-        version: 1.0.0-beta.0(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: ^0.6.0
+        version: 0.6.0(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@vapor-ui/hooks':
+        specifier: ^0.1.0
+        version: 0.1.0(react@19.1.0)
       '@vapor-ui/icons':
-        specifier: 1.0.0-beta.0
-        version: 1.0.0-beta.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: ^0.4.0
+        version: 0.4.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       install:
         specifier: ^0.13.0
         version: 0.13.0
@@ -863,19 +866,19 @@ packages:
     peerDependencies:
       webpack: ^4.30.0 || ^5.20.2
 
-  '@vapor-ui/core@1.0.0-beta.0':
-    resolution: {integrity: sha512-/ZQBaVKM2xxn8ye0Is192x/9yliu2TYELTtTc1yA03DnBGpOar99th0Rxb16ha+LrLc4OWT41sQznuLlmgxFww==}
+  '@vapor-ui/core@0.6.0':
+    resolution: {integrity: sha512-sz5Ra5fIqLHw5pi82bLcMBc3VtgSSf/mLyqwMesDpFyz/BUXN9YwwmJ9iUxEaLPIVuJIVoMPTakZcm0ohI4YJA==}
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@vapor-ui/hooks@1.0.0-beta.0':
-    resolution: {integrity: sha512-Uga4+O5eJyFUt5B876lC1X/kn8FtRKmDA5Pb+w2qOfBa3JYusdtPTdHnbeEntq8qYBqee0EKoUmKOfe7JgFcEQ==}
+  '@vapor-ui/hooks@0.1.0':
+    resolution: {integrity: sha512-YbfPS3BVwA5Mwa9HYnSLGCaikBgVINtc6SKwcSpxPFgLoMYuFp9eqXBH+1Nq5xFW6WGpLWHKDzGfU0AI5ICJAQ==}
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@vapor-ui/icons@1.0.0-beta.0':
-    resolution: {integrity: sha512-Kn01Ak7TB3L7ib4Ef179qZu6qyWPGLi+8Iq3ggpfFxJQcLSO1HEINB4Bqi2nGeM3udFa/tVIldZ9ehTMr3zCPg==}
+  '@vapor-ui/icons@0.4.0':
+    resolution: {integrity: sha512-10qWMkEoAXKYeaV5CpyzVOdADTyb4nLn0k8XZQjC6d+jUM2efh/72sIREPejvfeZu8mUZSWRIMLM40q2vaqXiQ==}
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -3118,7 +3121,7 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  '@vapor-ui/core@1.0.0-beta.0(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@vapor-ui/core@0.6.0(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@base-ui-components/react': 1.0.0-beta.2(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@base-ui-components/utils': 0.1.1(@types/react@19.1.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -3127,8 +3130,8 @@ snapshots:
       '@vanilla-extract/dynamic': 2.1.5
       '@vanilla-extract/recipes': 0.5.7(@vanilla-extract/css@1.17.4)
       '@vanilla-extract/sprinkles': 1.6.5(@vanilla-extract/css@1.17.4)
-      '@vapor-ui/hooks': 1.0.0-beta.0(react@19.1.0)
-      '@vapor-ui/icons': 1.0.0-beta.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@vapor-ui/hooks': 0.1.0(react@19.1.0)
+      '@vapor-ui/icons': 0.4.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       clsx: 2.1.1
       rainbow-sprinkles: 1.0.0(@vanilla-extract/css@1.17.4)(@vanilla-extract/dynamic@2.1.5)
       react: 19.1.0
@@ -3137,11 +3140,11 @@ snapshots:
       - '@types/react'
       - babel-plugin-macros
 
-  '@vapor-ui/hooks@1.0.0-beta.0(react@19.1.0)':
+  '@vapor-ui/hooks@0.1.0(react@19.1.0)':
     dependencies:
       react: 19.1.0
 
-  '@vapor-ui/icons@1.0.0-beta.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@vapor-ui/icons@0.4.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       clsx: 2.1.1
       react: 19.1.0
@@ -3685,7 +3688,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.36.0))(eslint@9.36.0):
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.36.0):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -3707,7 +3710,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.36.0
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.36.0))(eslint@9.36.0)
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.36.0)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
