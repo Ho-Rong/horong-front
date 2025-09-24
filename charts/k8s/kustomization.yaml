@@ -1,5 +1,6 @@
 resources:
   - front.yaml
+  - ingress.yaml
 
 configMapGenerator:
   - name: front-config
