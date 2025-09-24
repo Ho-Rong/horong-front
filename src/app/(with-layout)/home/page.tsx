@@ -1,5 +1,11 @@
 "use client";
 
+import GoogleMap from "@/components/Map/GoogleMap";
+
 export default function Page() {
-  return <div>세팅</div>;
+  return (
+    <div>
+      <GoogleMap />
+    </div>
+  );
 }
