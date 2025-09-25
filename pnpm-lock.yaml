@@ -5284,7 +5284,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+
   eslint-module-utils@2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.36.0):
+
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -5306,7 +5308,9 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.36.0
       eslint-import-resolver-node: 0.3.9
+
       eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.44.1(eslint@9.36.0)(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.36.0)
+
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3

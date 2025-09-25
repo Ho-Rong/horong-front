@@ -1,13 +1,21 @@
-// components/SpeedDial/SpeedDial.tsx
 "use client";
 
 import * as React from "react";
 import * as s from "./SpeedDial.css";
+import {
+  PlusOutlineIcon,
+  NoticeCircleIcon,
+  CloseOutlineIcon,
+} from "@vapor-ui/icons";
+import { IconButton } from "@vapor-ui/core";
+import { Icon } from "../Icon/Icon";
 
+// 필요한 id를 명시적으로 유니온으로 두고(안정성↑), 그 외 문자열도 허용
+type BuiltInId = "star" | "cctv" | "notice";
 type SpeedDialAction = {
-  id: string;
+  id: BuiltInId | (string & {}); // 커스텀 id도 가능
   label?: string;
-  icon?: React.ReactNode;
+  icon?: React.ReactNode; // 외부에서 아이콘 주면 그걸 우선 사용
   onClick?: () => void;
 };
 
@@ -26,63 +34,77 @@ export function SpeedDial({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const PlaceholderIcon = (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
-      <rect
-        x="3"
-        y="3"
-        width="20"
-        height="20"
-        rx="2"
-        stroke="#111"
-        fill="none"
-        strokeWidth="2"
-      />
-      <path d="M5 21L21 5M5 5l16 16" stroke="#111" strokeWidth="2" />
-    </svg>
-  );
+  // 액션별 기본 아이콘 매핑
+  const defaultIcons: Record<BuiltInId, React.ReactNode> = {
+    star: <Icon name="star" width={24} height={24} />,
+    cctv: <Icon name="cctv" width={24} height={24} />,
+    notice: <NoticeCircleIcon width={24} height={24} />,
+  };
+
+  const getIconFor = (a: SpeedDialAction) => {
+    if (a.icon) return a.icon; // 외부 주입 아이콘 우선
+    if ((["star", "cctv", "notice"] as const).includes(a.id as BuiltInId)) {
+      return defaultIcons[a.id as BuiltInId];
+    }
+    return null; // 아이콘 없을 수도 있음
+  };
 
   const delayKey = (idx: number) =>
     (["d0", "d1", "d2", "d3"] as const)[Math.min(idx, 3)];
+
+  // 공통 버튼 스타일
+  const floatingBtnStyle: React.CSSProperties = {
+    borderRadius: "50%",
+    backdropFilter: "blur(8px)",
+    background: "rgba(255,255,255,0.2)",
+    border: "0.5px solid rgba(255,255,255,0.5)",
+    color: "#fff",
+  };
 
   return (
     <div className={s.root} style={style}>
       {/* 펼쳐지는 액션들 */}
       <div className={s.actionsWrap({ open })} aria-hidden={!open}>
-        {actions.map((a, idx) => (
-          <button
-            key={a.id}
-            onClick={() => {
-              a.onClick?.();
-              setOpen(false);
-            }}
-            title={a.label}
-            aria-label={a.label ?? a.id}
-            className={s.actionBtn({ open, delay: delayKey(idx) })}
-          >
-            {a.icon ?? PlaceholderIcon}
-          </button>
-        ))}
+        {actions.map((a, idx) => {
+          const iconEl = getIconFor(a);
+          return (
+            <IconButton
+              key={a.id}
+              variant="ghost"
+              size="xl"
+              onClick={() => {
+                a.onClick?.();
+                setOpen(false);
+              }}
+              aria-label={a.label ?? String(a.id)}
+              className={s.actionBtn({ open, delay: delayKey(idx) })}
+              style={floatingBtnStyle}
+            >
+              {iconEl}
+            </IconButton>
+          );
+        })}
       </div>
 
       {/* 메인 FAB */}
-      <button
-        aria-expanded={open}
-        aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
+      <IconButton
+        variant="ghost"
+        size="xl"
         onClick={() => setOpen((v) => !v)}
-        className={s.fab}
+        style={floatingBtnStyle}
+        aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
+        aria-pressed={open}
       >
-        <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
-          {open ? (
-            <path d="M6 6L20 20M6 20L20 6" stroke="#111" strokeWidth="2" />
-          ) : (
-            <>
-              <path d="M4 13H22" stroke="#111" strokeWidth="2" />
-              <path d="M13 4V22" stroke="#111" strokeWidth="2" />
-            </>
-          )}
-        </svg>
-      </button>
+        {/* ← 아이콘 두 개를 겹쳐놓고 상태로 토글 */}
+        <span className={s.fabIconSwap}>
+          <span className={s.fabIcon({ kind: "plus", open })}>
+            <PlusOutlineIcon width={24} height={24} />
+          </span>
+          <span className={s.fabIcon({ kind: "close", open })}>
+            <CloseOutlineIcon width={24} height={24} />
+          </span>
+        </span>
+      </IconButton>
     </div>
   );
 }
