@@ -2,7 +2,7 @@
 
 echo "Sourcing environment variables from /app/env/config.env"
 
-. /app/env/config.env
+source /app/env/config.env
 
 printenv
 

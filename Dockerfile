@@ -11,6 +11,7 @@ RUN pnpm run build
 EXPOSE 3000
 
 
-COPY ./charts/k8s/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-ENTRYPOINT ["entrypoint.sh"]
+COPY ./charts/k8s/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+CMD /bin/bash -c entrypoint.sh
