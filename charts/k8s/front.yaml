@@ -14,17 +14,23 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: 837126493345.dkr.ecr.ap-northeast-2.amazonaws.com/goormthon-4/frontend:build-33
+          image: 837126493345.dkr.ecr.ap-northeast-2.amazonaws.com/goormthon-4/frontend:build-59
           ports:
             - containerPort: 3000
           volumeMounts:
             - name: config-volume
               mountPath: /app/config
               readOnly: true
+            - name: env-volume
+              mountPath: /app/env
+              readOnly: true
       volumes:
         - name: config-volume
           configMap:
             name: front-config
+        - name: env-volume
+          configMap:
+            name: env-config
 ---
 apiVersion: v1
 kind: Service
