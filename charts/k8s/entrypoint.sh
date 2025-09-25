@@ -2,10 +2,9 @@
 
 echo "Sourcing environment variables from /app/env/config.env"
 
-set -a
-source /app/env/.env
-set +a
+. /app/env/.env
 
+printenv
 
 echo "Starting the application..."
 pnpm start
