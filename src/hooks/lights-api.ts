@@ -26,9 +26,9 @@ export interface GetLightsParams {
 /** 구글맵 zoom≈(3~21) → 서버 ZOOM_1~5 매핑 (API 스펙에 맞춤) */
 export function mapZoomToLevel(zoom: number): ZoomLevel {
   if (zoom >= 20) return "ZOOM_1";
-  if (zoom >= 15) return "ZOOM_2";
-  if (zoom >= 13) return "ZOOM_3";
-  if (zoom >= 11) return "ZOOM_4";
+  if (zoom >= 20) return "ZOOM_2";
+  if (zoom >= 18) return "ZOOM_3";
+  if (zoom >= 15) return "ZOOM_4";
   return "ZOOM_5";
 }
 
@@ -40,11 +40,11 @@ export function gridSizeForLevel(level: ZoomLevel): number {
     case "ZOOM_2":
       return 999;
     case "ZOOM_3":
-      return 20;
+      return 999;
     case "ZOOM_4":
-      return 20;
+      return 500;
     case "ZOOM_5":
-      return 20;
+      return 10;
   }
 }
 

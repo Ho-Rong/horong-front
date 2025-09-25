@@ -17,11 +17,15 @@ export function getClusterSizeByCount(
   zoom: ZoomLevel
 ): ClusterSize {
   if (zoom === "ZOOM_5") {
-    if (count >= 5500) return "large";
-    if (count >= 4000) return "2medium";
-    if (count >= 3000) return "3medium";
-    if (count >= 2000) return "1small";
+    //if (count >= 5500) return "large";
+    if (count >= 4000) return "3medium";
+    if (count >= 3500) return "2medium";
+    if (count >= 3000) return "2medium";
+    if (count >= 2500) return "2medium";
+    if (count >= 2000) return "1medium";
+    if (count >= 1500) return "1medium";
     if (count >= 1000) return "1small";
+    if (count >= 500) return "2small";
     return "2small";
   }
 
