@@ -5,6 +5,8 @@ import LocationIcon from "./location.svg";
 import StarIcon from "./star.svg";
 import CctvIcon from "./cctv.svg";
 import triangleIcon from "./triangle.svg";
+import horongIcon from "./horong.svg";
+import squareIcon from "./square.svg";
 
 // 아이콘 매핑 객체
 export const iconMap = {
@@ -15,4 +17,6 @@ export const iconMap = {
   star: StarIcon,
   cctv: CctvIcon,
   triangle: triangleIcon,
+  horong: horongIcon,
+  square: squareIcon,
 };

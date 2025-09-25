@@ -1,21 +1,21 @@
-// hooks/useCctvLayer.ts
+// hooks/useReportsLayer.ts
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Icon } from "@/components/Icon/Icon";
 import {
-  fetchCams,
+  fetchReports,
   mapZoomToLevel,
-  type CamPoint,
+  type ReportPoint,
   type ZoomLevel,
-} from "@/hooks/cams-api";
+} from "@/hooks/reports-api";
 
-/** count → 버킷 → 픽셀 크기 테이블 (원하는 감도로 조정 가능) */
-type Bucket = "tri" | "s1" | "s2" | "s3" | "s4" | "m1" | "m2" | "m3" | "lg";
+/** count → 버킷 → 픽셀 사이즈 (CCTV와 동일 감도) */
+type Bucket = "sq" | "s1" | "s2" | "s3" | "s4" | "m1" | "m2" | "m3" | "lg";
 
 function bucketByCount(count: number): Bucket {
-  if (count <= 1) return "tri";
+  if (count <= 1) return "sq";
   if (count >= 400) return "lg";
   if (count >= 300) return "m1";
   if (count >= 200) return "m2";
@@ -27,7 +27,7 @@ function bucketByCount(count: number): Bucket {
 }
 
 const BUCKET_PX: Record<Bucket, number> = {
-  tri: 40,
+  sq: 40,
   s1: 50,
   s2: 44,
   s3: 38,
@@ -38,64 +38,8 @@ const BUCKET_PX: Record<Bucket, number> = {
   lg: 90,
 };
 
-/* ---------- UI 팩토리 ---------- */
-
-function makeTriangleIcon(count: number, side = 40) {
-  const wrap = document.createElement("div");
-  wrap.style.width = `${side}px`;
-  wrap.style.height = `${side}px`;
-  wrap.style.transform = "translate(-50%, -50%)";
-  wrap.style.position = "absolute";
-  wrap.style.display = "grid";
-  (wrap.style as any).placeItems = "center";
-  wrap.style.userSelect = "none";
-  wrap.style.pointerEvents = "none";
-
-  const iconMarkup = renderToStaticMarkup(
-    <Icon
-      name="triangle"
-      width={side}
-      height={side}
-      // 최상위 SVG에 기본 의도 전달
-      style={{ fill: "#F86571", stroke: "none" }}
-    />
-  );
-  wrap.innerHTML = iconMarkup;
-
-  // ✅ 어떤 글로벌/내부 스타일에도 불구하고 테두리 제거
-  const svg = wrap.querySelector("svg") as SVGElement | null;
-  if (svg) {
-    svg.setAttribute("stroke", "none");
-    svg.style.display = "block"; // 여백/라인 보정
-    svg.style.overflow = "visible";
-  }
-  wrap
-    .querySelectorAll("path,polygon,polyline,line,circle,ellipse,rect")
-    .forEach((el) => {
-      el.setAttribute("stroke", "none");
-      // 혹시 stroke-width가 남아 있으면 0으로
-      (el as SVGElement).setAttribute("stroke-width", "0");
-    });
-
-  const label = document.createElement("div");
-  label.textContent = String(count);
-  label.style.position = "absolute";
-  label.style.inset = "0";
-  label.style.display = "grid";
-  (label.style as any).placeItems = "center";
-  label.style.color = "#fff";
-  label.style.fontWeight = "800";
-  label.style.fontSize = "14px";
-  label.style.fontFamily =
-    "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  label.style.pointerEvents = "none";
-  label.style.textShadow = "0 1px 2px rgba(0,0,0,0.35)";
-  wrap.appendChild(label);
-
-  return wrap;
-}
-/** 그라데이션 원: 코어 + 라벨 (심플 CSS glow) */
-function makeGlowCircle(count: number, px: number) {
+/** 🔷 동그라미(파란 glow): 안쪽 투명 → 바깥 파랗게 */
+function makeBlueGlowCircle(count: number, px: number) {
   const wrap = document.createElement("div");
   wrap.style.position = "absolute";
   wrap.style.transform = "translate(-50%, -50%)";
@@ -108,12 +52,12 @@ function makeGlowCircle(count: number, px: number) {
   core.style.position = "absolute";
   core.style.inset = "0";
   core.style.borderRadius = "50%";
+  // 요청한 CSS 변수 우선 적용
   core.style.background =
-    "radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(217,141,147,0.20) 0%, #D98D93 100%)";
+    "var(--cctv-style, radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(164,201,255,0.00) 0%, var(--vapor-color-blue-200) 100%))";
   core.style.boxShadow = `0 0 ${Math.round(px * 0.45)}px ${Math.round(
     px * 0.18
-  )}px rgba(217,141,147,0.35)`;
-  (core.style as any).willChange = "transform";
+  )}px rgba(105,162,245,0.35)`;
 
   const label = document.createElement("div");
   label.textContent = String(count);
@@ -133,15 +77,82 @@ function makeGlowCircle(count: number, px: number) {
   return wrap;
 }
 
+/** 🟦 사각형 클러스터(Icon square) + 파란 그라데이션 */
+function makeSquareIcon(count: number, side = 40) {
+  const wrap = document.createElement("div");
+  wrap.style.width = `${side}px`;
+  wrap.style.height = `${side}px`;
+  wrap.style.transform = "translate(-50%, -50%)";
+  wrap.style.position = "absolute";
+  wrap.style.display = "grid";
+  (wrap.style as any).placeItems = "center";
+  wrap.style.userSelect = "none";
+  wrap.style.pointerEvents = "none";
+
+  // 배경 그라데이션
+  const badge = document.createElement("div");
+  badge.style.position = "absolute";
+  badge.style.inset = "0";
+  badge.style.borderRadius = "8px";
+  badge.style.background =
+    "var(--cctv2, linear-gradient(157deg, rgba(164,201,255,0.60) 28.84%, rgba(105,162,245,0.60) 84.95%))";
+  badge.style.boxShadow = "0 4px 16px rgba(105,162,245,0.35)";
+  wrap.appendChild(badge);
+
+  // 아이콘 삽입
+  const iconMarkup = renderToStaticMarkup(
+    <Icon
+      name="square"
+      width={side}
+      height={side}
+      style={{ fill: "transparent", stroke: "none" }}
+    />
+  );
+  const holder = document.createElement("div");
+  holder.innerHTML = iconMarkup;
+  const svg = holder.querySelector("svg") as SVGElement | null;
+  if (svg) {
+    // ✅ 테두리 강제 제거
+    svg.setAttribute("stroke", "none");
+    svg.setAttribute("fill", "transparent");
+    svg.style.display = "block";
+    svg.style.overflow = "visible";
+
+    svg
+      .querySelectorAll("path, rect, polygon, polyline, line")
+      .forEach((el) => {
+        el.setAttribute("stroke", "none");
+        el.setAttribute("stroke-width", "0");
+      });
+
+    wrap.appendChild(svg);
+  }
+
+  // 라벨
+  const label = document.createElement("div");
+  label.textContent = String(count);
+  label.style.position = "absolute";
+  label.style.inset = "0";
+  label.style.display = "grid";
+  (label.style as any).placeItems = "center";
+  label.style.color = "#fff";
+  label.style.fontWeight = "800";
+  label.style.fontSize = "14px";
+  label.style.fontFamily =
+    "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+  label.style.pointerEvents = "none";
+  wrap.appendChild(label);
+
+  return wrap;
+}
 /* ---------- 훅 ---------- */
 
-export type UseCctvLayerOptions = {
-  initialEnabled?: boolean; // 기본: 꺼짐
-  cooldownMs?: number; // 기본: 700ms
+export type UseReportsLayerOptions = {
+  initialEnabled?: boolean;
+  cooldownMs?: number;
 };
 
 type LatLng = { lat: number; lng: number };
-
 function haversineMeters(a: LatLng, b: LatLng): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -154,7 +165,6 @@ function haversineMeters(a: LatLng, b: LatLng): number {
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-
 function moveThresholdMeters(zoom: number): number {
   if (zoom >= 20) return 20;
   if (zoom >= 18) return 50;
@@ -162,9 +172,9 @@ function moveThresholdMeters(zoom: number): number {
   return 300;
 }
 
-export function useCctvLayer(
+export function useReportsLayer(
   map: google.maps.Map | null,
-  opts: UseCctvLayerOptions = {}
+  opts: UseReportsLayerOptions = {}
 ) {
   const cooldownMs = opts.cooldownMs ?? 700;
   const [enabled, setEnabled] = useState<boolean>(opts.initialEnabled ?? false);
@@ -186,7 +196,7 @@ export function useCctvLayer(
   } | null>(null);
   const listenersRef = useRef<google.maps.MapsEventListener[]>([]);
 
-  const buildMarkers = async (points: CamPoint[]) => {
+  const buildMarkers = async (points: ReportPoint[]) => {
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
       "marker"
     )) as google.maps.MarkerLibrary;
@@ -194,11 +204,10 @@ export function useCctvLayer(
     return points.map((p) => {
       const b = bucketByCount(p.count);
       const px = BUCKET_PX[b];
-
       const content =
-        b === "tri"
-          ? makeTriangleIcon(p.count, px)
-          : makeGlowCircle(p.count, px);
+        b === "sq"
+          ? makeSquareIcon(p.count, px)
+          : makeBlueGlowCircle(p.count, px);
 
       return new AdvancedMarkerElement({
         position: { lat: p.latitude, lng: p.longitude },
@@ -210,7 +219,6 @@ export function useCctvLayer(
 
   const runFetch = () => {
     if (!map || !enabledRef.current) return;
-
     const center = map.getCenter();
     if (!center) return;
 
@@ -239,7 +247,7 @@ export function useCctvLayer(
     inflightRef.current = ac;
     const myGen = ++genRef.current;
 
-    fetchCams({
+    fetchReports({
       latitude: lat,
       longitude: lng,
       zoomLevel: level,
@@ -248,20 +256,17 @@ export function useCctvLayer(
       .then(buildMarkers)
       .then((markers) => {
         if (!enabledRef.current || myGen !== genRef.current) return;
-
-        // 교체
         markersRef.current.forEach((m) => (m.map = null));
         markersRef.current = [];
         markers.forEach((m) => {
           m.map = map!;
           markersRef.current.push(m);
         });
-
         lastQueryRef.current = { lat, lng, level, ts: now };
       })
       .catch((e) => {
         if (e?.name === "AbortError") return;
-        console.warn("[cctv] fetch failed:", e);
+        console.warn("[reports] fetch failed:", e);
       });
   };
 
@@ -274,7 +279,6 @@ export function useCctvLayer(
 
   useEffect(() => {
     if (!map) return;
-
     const ls: google.maps.MapsEventListener[] = [];
     ls.push(map.addListener("idle", () => trigger(false)));
     listenersRef.current = ls;

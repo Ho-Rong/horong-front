@@ -2,24 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SpeedDial } from "../SpeedDial/SpeedDial";
-import {
-  MarkerClusterer,
-  SuperClusterAlgorithm,
-  type Renderer,
-} from "@googlemaps/markerclusterer";
 import { Icon } from "../Icon/Icon";
 import { renderToStaticMarkup } from "react-dom/server";
-import { getClusterSizeByCount } from "@/utils/cluster-size"; // returns "small" | "medium" | "large"
-import { createCssGlowCluster } from "./css-glow-cluster"; // accepts "small" | "medium" | "large"
 import { HStack, IconButton, VStack, Text } from "@vapor-ui/core";
-import { HomeIcon } from "@vapor-ui/icons";
-import {
-  fetchLights,
-  mapZoomToLevel,
-  type LightPoint,
-} from "@/hooks/lights-api";
 import { useLightsLayer } from "@/hooks/useLightsLayer";
 import { useCctvLayer } from "@/hooks/useCctvLayer";
+import Lottie from "lottie-react";
+import farmAnim from "@/lotties/farm.json";
+import { useReportsLayer } from "@/hooks/useReportsLayer";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
@@ -37,11 +27,15 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
 
   const cctv = useCctvLayer(map, {
-    initialEnabled: false, // 시작은 OFF
-    cooldownMs: 700, // 필요시 조절
+    initialEnabled: false,
+    cooldownMs: 700,
   });
 
-  // 캔버스 준비
+  const report = useReportsLayer(map, {
+    initialEnabled: false,
+    cooldownMs: 700,
+  });
+
   useEffect(() => {
     if (!canvasRef.current) return;
     const ro = new ResizeObserver(([e]) => {
@@ -107,21 +101,22 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   });
 
   // 현재 위치 따라가기
+  // 현재 위치 따라가기
   const startFollow = async () => {
     if (!map) return;
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
       "marker"
     )) as google.maps.MarkerLibrary;
 
-    const makeDot = () => {
-      const dot = document.createElement("div");
-      dot.style.width = "14px";
-      dot.style.height = "14px";
-      dot.style.borderRadius = "50%";
-      dot.style.background = "#3B82F6";
-      dot.style.border = "2px solid white";
-      dot.style.transform = "translate(-50%, -50%)";
-      return dot;
+    const svgHtml = renderToStaticMarkup(
+      <Icon name="horong" width={40} height={40} />
+    );
+
+    const makeIcon = () => {
+      const el = document.createElement("div");
+      el.innerHTML = svgHtml;
+      // innerHTML은 루트가 <svg>라서 childNodes[0]에 svg가 들어감
+      return el.firstChild as HTMLElement;
     };
 
     if (watchIdRef.current != null) {
@@ -142,7 +137,8 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           map,
           position: here,
           title: "현재 위치",
-          content: makeDot(),
+          content: makeIcon(),
+          zIndex: 3000, // 다른 마커보다 위에 보이도록
         });
       } else {
         myMarkerRef.current.position = here;
@@ -203,7 +199,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       />
 
       <IconButton
-        variant="ghost" // 투명 + hover 효과
+        variant="ghost"
         size="xl"
         onClick={() => console.log("농장으로 가기")}
         style={{
@@ -216,11 +212,15 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           border: "0.5px solid rgba(255,255,255,0.5)",
           color: "#fff",
           zIndex: 6,
-          //marginTop: "9px",
         }}
-        aria-label="필터"
+        aria-label="농장"
       >
-        <HomeIcon />
+        <Lottie
+          animationData={farmAnim}
+          loop
+          autoplay
+          style={{ width: 32, height: 32, pointerEvents: "none" }} // 버튼 클릭 방해 X
+        />
       </IconButton>
 
       {/* 하단 컨트롤 바 */}
@@ -243,26 +243,28 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
                 id: "star",
                 label: "가로등",
                 onClick: () => {
-                  // 가로등만 켜두고 CCTV는 끄기
                   cctv.hide();
-                  lights.toggle();
-                  if (!lights.enabled) lights.show(); // label 갱신 타이밍 고려해 안전하게
+                  report.hide();
+                  lights.show();
                 },
               },
               {
                 id: "cctv",
                 label: "CCTV",
                 onClick: () => {
-                  // CCTV 켜면 가로등은 끄기
                   lights.hide();
-                  cctv.toggle();
-                  if (!cctv.enabled) cctv.show();
+                  report.hide();
+                  cctv.show();
                 },
               },
               {
                 id: "notice",
                 label: "신고",
-                onClick: () => console.log("notice"),
+                onClick: () => {
+                  lights.hide();
+                  cctv.hide();
+                  report.show();
+                },
               },
             ]}
           />

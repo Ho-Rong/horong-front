@@ -16,15 +16,41 @@ export function getClusterSizeByCount(
   count: number,
   zoom: ZoomLevel
 ): ClusterSize {
-  if (zoom === "ZOOM_5" || zoom === "ZOOM_6") {
-    if (count >= 8000) return "large";
-    if (count >= 6000) return "2large";
-    if (count >= 5000) return "1medium";
-    if (count >= 3000) return "2medium";
-    if (count >= 1000) return "3medium";
-    if (count >= 500) return "3medium";
-    return "1small";
+  if (zoom === "ZOOM_5") {
+    if (count >= 5500) return "large";
+    if (count >= 4000) return "2medium";
+    if (count >= 3000) return "3medium";
+    if (count >= 2000) return "1small";
+    if (count >= 1000) return "1small";
+    return "2small";
   }
+
+  /*  if (zoom === "ZOOM_2") {
+    if (count >= 5500) return "large";
+    if (count >= 4000) return "2medium";
+    if (count >= 3000) return "3medium";
+    if (count >= 2000) return "1small";
+    if (count >= 1000) return "1small";
+    return "2small";
+  }
+
+  if (zoom === "ZOOM_3") {
+    if (count >= 5500) return "large";
+    if (count >= 4000) return "2medium";
+    if (count >= 3000) return "3medium";
+    if (count >= 2000) return "1small";
+    if (count >= 1000) return "1small";
+    return "2small";
+  }
+
+  if (zoom === "ZOOM_4") {
+    if (count >= 5500) return "large";
+    if (count >= 4000) return "2medium";
+    if (count >= 3000) return "3medium";
+    if (count >= 2000) return "1small";
+    if (count >= 1000) return "1small";
+    return "2small";
+  }*/
 
   // 기본 (세밀 줌)
   if (count >= 400) return "large";
