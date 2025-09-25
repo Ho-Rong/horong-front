@@ -1,7 +1,7 @@
 // hooks/useCctvLayer.ts
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Icon } from "@/components/Icon/Icon";
 import {
@@ -11,18 +11,18 @@ import {
   type ZoomLevel,
 } from "@/hooks/cams-api";
 
-/** count → 버킷 → 픽셀 크기 테이블 (원하는 감도로 조정 가능) */
+/** count → 버킷 → 픽셀 크기 테이블 */
 type Bucket = "tri" | "s1" | "s2" | "s3" | "s4" | "m1" | "m2" | "m3" | "lg";
 
 function bucketByCount(count: number): Bucket {
   if (count <= 1) return "tri";
-  if (count >= 400) return "lg";
-  if (count >= 300) return "m1";
-  if (count >= 200) return "m2";
-  if (count >= 100) return "m3";
-  if (count >= 70) return "s1";
-  if (count >= 50) return "s2";
-  if (count >= 30) return "s3";
+  if (count >= 300) return "lg";
+  if (count >= 200) return "m1";
+  if (count >= 100) return "m2";
+  if (count >= 50) return "m3";
+  if (count >= 30) return "s1";
+  if (count >= 20) return "s2";
+  if (count >= 10) return "s3";
   return "s4";
 }
 
@@ -40,7 +40,7 @@ const BUCKET_PX: Record<Bucket, number> = {
 
 /* ---------- UI 팩토리 ---------- */
 
-function makeTriangleIcon(count: number, side = 40) {
+function makeTriangleIcon(count: number, side = 20) {
   const wrap = document.createElement("div");
   wrap.style.width = `${side}px`;
   wrap.style.height = `${side}px`;
@@ -53,29 +53,28 @@ function makeTriangleIcon(count: number, side = 40) {
 
   const iconMarkup = renderToStaticMarkup(
     <Icon
-      name="triangle"
-      width={side}
-      height={side}
-      // 최상위 SVG에 기본 의도 전달
-      style={{ fill: "#F86571", stroke: "none" }}
+      name="square"
+      width={30}
+      height={30}
+      style={{ fill: "transparent", stroke: "none" }}
     />
   );
-  wrap.innerHTML = iconMarkup;
-
-  // ✅ 어떤 글로벌/내부 스타일에도 불구하고 테두리 제거
-  const svg = wrap.querySelector("svg") as SVGElement | null;
+  const holder = document.createElement("div");
+  holder.innerHTML = iconMarkup;
+  const svg = holder.querySelector("svg") as SVGElement | null;
   if (svg) {
     svg.setAttribute("stroke", "none");
-    svg.style.display = "block"; // 여백/라인 보정
+    svg.setAttribute("fill", "transparent");
+    svg.style.display = "block";
     svg.style.overflow = "visible";
+    svg
+      .querySelectorAll("path, rect, polygon, polyline, line")
+      .forEach((el) => {
+        el.setAttribute("stroke", "none");
+        el.setAttribute("stroke-width", "0");
+      });
+    wrap.appendChild(svg);
   }
-  wrap
-    .querySelectorAll("path,polygon,polyline,line,circle,ellipse,rect")
-    .forEach((el) => {
-      el.setAttribute("stroke", "none");
-      // 혹시 stroke-width가 남아 있으면 0으로
-      (el as SVGElement).setAttribute("stroke-width", "0");
-    });
 
   const label = document.createElement("div");
   label.textContent = String(count);
@@ -85,16 +84,15 @@ function makeTriangleIcon(count: number, side = 40) {
   (label.style as any).placeItems = "center";
   label.style.color = "#fff";
   label.style.fontWeight = "800";
-  label.style.fontSize = "14px";
+  label.style.fontSize = "12px";
   label.style.fontFamily =
     "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
   label.style.pointerEvents = "none";
-  label.style.textShadow = "0 1px 2px rgba(0,0,0,0.35)";
   wrap.appendChild(label);
 
   return wrap;
 }
-/** 그라데이션 원: 코어 + 라벨 (심플 CSS glow) */
+
 function makeGlowCircle(count: number, px: number) {
   const wrap = document.createElement("div");
   wrap.style.position = "absolute";
@@ -109,11 +107,10 @@ function makeGlowCircle(count: number, px: number) {
   core.style.inset = "0";
   core.style.borderRadius = "50%";
   core.style.background =
-    "radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(217,141,147,0.20) 0%, #D98D93 100%)";
+    "var(--cctv-style, radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(164,201,255,0.00) 0%, var(--vapor-color-blue-200) 100%))";
   core.style.boxShadow = `0 0 ${Math.round(px * 0.45)}px ${Math.round(
     px * 0.18
-  )}px rgba(217,141,147,0.35)`;
-  (core.style as any).willChange = "transform";
+  )}px rgba(105,162,245,0.35)`;
 
   const label = document.createElement("div");
   label.textContent = String(count);
@@ -136,8 +133,8 @@ function makeGlowCircle(count: number, px: number) {
 /* ---------- 훅 ---------- */
 
 export type UseCctvLayerOptions = {
-  initialEnabled?: boolean; // 기본: 꺼짐
-  cooldownMs?: number; // 기본: 700ms
+  initialEnabled?: boolean; // default false
+  cooldownMs?: number; // default 700ms
 };
 
 type LatLng = { lat: number; lng: number };
@@ -175,6 +172,8 @@ export function useCctvLayer(
   }, [enabled]);
 
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const cacheRef = useRef<CamPoint[] | null>(null);
+
   const inflightRef = useRef<AbortController | null>(null);
   const genRef = useRef(0);
   const debounceTimerRef = useRef<number | null>(null);
@@ -184,7 +183,15 @@ export function useCctvLayer(
     level: ZoomLevel;
     ts: number;
   } | null>(null);
-  const listenersRef = useRef<google.maps.MapsEventListener[]>([]);
+
+  const viewportKey = useMemo(() => {
+    if (!map) return "none";
+    const z = map.getZoom() ?? 0;
+    const c = map.getCenter();
+    const lat = c?.lat ? Number(c.lat().toFixed(3)) : 0;
+    const lng = c?.lng ? Number(c.lng().toFixed(3)) : 0;
+    return `${z}:${lat},${lng}`;
+  }, [map?.getZoom?.(), map?.getCenter?.()?.lat(), map?.getCenter?.()?.lng()]);
 
   const buildMarkers = async (points: CamPoint[]) => {
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
@@ -208,7 +215,7 @@ export function useCctvLayer(
     });
   };
 
-  const runFetch = () => {
+  const runFetch = async (force = false) => {
     if (!map || !enabledRef.current) return;
 
     const center = map.getCenter();
@@ -221,8 +228,9 @@ export function useCctvLayer(
     const now = Date.now();
 
     const last = lastQueryRef.current;
-    let needFetch = !last;
-    if (last) {
+    let needFetch = force || !last;
+
+    if (!needFetch && last) {
       const moved = haversineMeters(
         { lat: last.lat, lng: last.lng },
         { lat, lng }
@@ -230,7 +238,12 @@ export function useCctvLayer(
       const movedEnough = moved > moveThresholdMeters(zoom);
       const levelChanged = last.level !== level;
       const cooledDown = now - last.ts > cooldownMs;
-      needFetch = (levelChanged || movedEnough) && cooledDown;
+
+      const hasAttached = markersRef.current.some((m) => m.map != null);
+
+      needFetch =
+        (!hasAttached && enabledRef.current) ||
+        ((levelChanged || movedEnough) && cooledDown);
     }
     if (!needFetch) return;
 
@@ -239,78 +252,96 @@ export function useCctvLayer(
     inflightRef.current = ac;
     const myGen = ++genRef.current;
 
-    fetchCams({
-      latitude: lat,
-      longitude: lng,
-      zoomLevel: level,
-      signal: ac.signal,
-    })
-      .then(buildMarkers)
-      .then((markers) => {
-        if (!enabledRef.current || myGen !== genRef.current) return;
-
-        // 교체
-        markersRef.current.forEach((m) => (m.map = null));
-        markersRef.current = [];
-        markers.forEach((m) => {
-          m.map = map!;
-          markersRef.current.push(m);
-        });
-
-        lastQueryRef.current = { lat, lng, level, ts: now };
-      })
-      .catch((e) => {
-        if (e?.name === "AbortError") return;
-        console.warn("[cctv] fetch failed:", e);
+    try {
+      const points = await fetchCams({
+        latitude: lat,
+        longitude: lng,
+        zoomLevel: level,
+        signal: ac.signal,
       });
+
+      cacheRef.current = points;
+
+      const markers = await buildMarkers(points);
+
+      // 기존 마커 detach
+      markersRef.current.forEach((m) => (m.map = null));
+      markersRef.current = markers;
+
+      if (!enabledRef.current || myGen !== genRef.current) return;
+
+      markersRef.current.forEach((m) => (m.map = map));
+      lastQueryRef.current = { lat, lng, level, ts: now };
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+      console.warn("[cctv] fetch failed:", e);
+    }
   };
 
-  const trigger = (immediate = false) => {
+  const trigger = (immediate = false, force = false) => {
     if (!map || !enabledRef.current) return;
-    if (immediate) return void runFetch();
+    if (immediate) return void runFetch(force);
     if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = window.setTimeout(runFetch, 220);
+    debounceTimerRef.current = window.setTimeout(() => runFetch(force), 220);
   };
 
+  // 지도 이벤트
   useEffect(() => {
     if (!map) return;
 
-    const ls: google.maps.MapsEventListener[] = [];
-    ls.push(map.addListener("idle", () => trigger(false)));
-    listenersRef.current = ls;
-
-    if (enabledRef.current) trigger(true);
+    const idleL = map.addListener("idle", () => trigger(false));
+    if (enabledRef.current) trigger(true, true);
 
     return () => {
       inflightRef.current?.abort();
       ++genRef.current;
+
       if (debounceTimerRef.current)
         window.clearTimeout(debounceTimerRef.current);
-      listenersRef.current.forEach((l) => l.remove());
-      listenersRef.current = [];
+
+      idleL.remove?.();
+
+      // 언마운트 시에만 완전 정리
       markersRef.current.forEach((m) => (m.map = null));
       markersRef.current = [];
+      cacheRef.current = null;
       lastQueryRef.current = null;
     };
   }, [map]);
 
+  // on/off 토글 (데이터 보존, detach/attach)
   useEffect(() => {
     if (!map) return;
+
     if (!enabled) {
       inflightRef.current?.abort();
       ++genRef.current;
-      markersRef.current.forEach((m) => (m.map = null));
-      markersRef.current = [];
+      markersRef.current.forEach((m) => (m.map = null)); // detach만
       return;
     }
-    trigger(true);
-  }, [enabled, map]);
+
+    // 켜질 때: 캐시가 있으면 즉시 복구, 이후 최신화
+    if (cacheRef.current && markersRef.current.length > 0) {
+      markersRef.current.forEach((m) => (m.map = map));
+      trigger(true, true); // 쿨다운 무시하고 갱신
+    } else if (cacheRef.current && markersRef.current.length === 0) {
+      (async () => {
+        const markers = await buildMarkers(cacheRef.current!);
+        markersRef.current = markers;
+        markersRef.current.forEach((m) => (m.map = map));
+        trigger(true); // 일반 갱신
+      })();
+    } else {
+      // 캐시 없음 → 강제 최초 로드
+      trigger(true, true);
+    }
+  }, [enabled, map, viewportKey]);
 
   return {
     enabled,
     show: () => setEnabled(true),
     hide: () => setEnabled(false),
     toggle: () => setEnabled((v) => !v),
-    reload: () => trigger(true),
+    reload: (opts?: { force?: boolean }) => trigger(true, !!opts?.force),
   };
 }

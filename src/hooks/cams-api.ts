@@ -44,7 +44,7 @@ export function gridSizeForLevel(level: ZoomLevel): number {
     case "ZOOM_4":
       return 100;
     case "ZOOM_5":
-      return 100;
+      return 20;
     case "ZOOM_6":
     default:
       return 20; // 가장 넓음

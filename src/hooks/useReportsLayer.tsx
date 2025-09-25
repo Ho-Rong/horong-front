@@ -1,7 +1,7 @@
 // hooks/useReportsLayer.ts
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Icon } from "@/components/Icon/Icon";
 import {
@@ -52,12 +52,12 @@ function makeBlueGlowCircle(count: number, px: number) {
   core.style.position = "absolute";
   core.style.inset = "0";
   core.style.borderRadius = "50%";
-  // 요청한 CSS 변수 우선 적용
   core.style.background =
-    "var(--cctv-style, radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(164,201,255,0.00) 0%, var(--vapor-color-blue-200) 100%))";
+    "radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(217,141,147,0.20) 0%, #D98D93 100%)";
   core.style.boxShadow = `0 0 ${Math.round(px * 0.45)}px ${Math.round(
     px * 0.18
-  )}px rgba(105,162,245,0.35)`;
+  )}px rgba(217,141,147,0.35)`;
+  (core.style as any).willChange = "transform";
 
   const label = document.createElement("div");
   label.textContent = String(count);
@@ -89,46 +89,29 @@ function makeSquareIcon(count: number, side = 40) {
   wrap.style.userSelect = "none";
   wrap.style.pointerEvents = "none";
 
-  // 배경 그라데이션
-  const badge = document.createElement("div");
-  badge.style.position = "absolute";
-  badge.style.inset = "0";
-  badge.style.borderRadius = "8px";
-  badge.style.background =
-    "var(--cctv2, linear-gradient(157deg, rgba(164,201,255,0.60) 28.84%, rgba(105,162,245,0.60) 84.95%))";
-  badge.style.boxShadow = "0 4px 16px rgba(105,162,245,0.35)";
-  wrap.appendChild(badge);
-
-  // 아이콘 삽입
   const iconMarkup = renderToStaticMarkup(
     <Icon
-      name="square"
+      name="triangle"
       width={side}
       height={side}
-      style={{ fill: "transparent", stroke: "none" }}
+      style={{ fill: "#F86571", stroke: "none" }}
     />
   );
-  const holder = document.createElement("div");
-  holder.innerHTML = iconMarkup;
-  const svg = holder.querySelector("svg") as SVGElement | null;
+  wrap.innerHTML = iconMarkup;
+
+  const svg = wrap.querySelector("svg") as SVGElement | null;
   if (svg) {
-    // ✅ 테두리 강제 제거
     svg.setAttribute("stroke", "none");
-    svg.setAttribute("fill", "transparent");
     svg.style.display = "block";
     svg.style.overflow = "visible";
-
-    svg
-      .querySelectorAll("path, rect, polygon, polyline, line")
-      .forEach((el) => {
-        el.setAttribute("stroke", "none");
-        el.setAttribute("stroke-width", "0");
-      });
-
-    wrap.appendChild(svg);
   }
+  wrap
+    .querySelectorAll("path,polygon,polyline,line,circle,ellipse,rect")
+    .forEach((el) => {
+      (el as SVGElement).setAttribute("stroke", "none");
+      (el as SVGElement).setAttribute("stroke-width", "0");
+    });
 
-  // 라벨
   const label = document.createElement("div");
   label.textContent = String(count);
   label.style.position = "absolute";
@@ -141,10 +124,12 @@ function makeSquareIcon(count: number, side = 40) {
   label.style.fontFamily =
     "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
   label.style.pointerEvents = "none";
+  label.style.textShadow = "0 1px 2px rgba(0,0,0,0.35)";
   wrap.appendChild(label);
 
   return wrap;
 }
+
 /* ---------- 훅 ---------- */
 
 export type UseReportsLayerOptions = {
@@ -185,6 +170,8 @@ export function useReportsLayer(
   }, [enabled]);
 
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const cacheRef = useRef<ReportPoint[] | null>(null);
+
   const inflightRef = useRef<AbortController | null>(null);
   const genRef = useRef(0);
   const debounceTimerRef = useRef<number | null>(null);
@@ -194,7 +181,16 @@ export function useReportsLayer(
     level: ZoomLevel;
     ts: number;
   } | null>(null);
-  const listenersRef = useRef<google.maps.MapsEventListener[]>([]);
+
+  // 뷰포트 스냅샷 키(너무 잦은 업데이트 방지용 소수점 절삭)
+  const viewportKey = useMemo(() => {
+    if (!map) return "none";
+    const z = map.getZoom() ?? 0;
+    const c = map.getCenter();
+    const lat = c?.lat ? Number(c.lat().toFixed(3)) : 0;
+    const lng = c?.lng ? Number(c.lng().toFixed(3)) : 0;
+    return `${z}:${lat},${lng}`;
+  }, [map?.getZoom?.(), map?.getCenter?.()?.lat(), map?.getCenter?.()?.lng()]);
 
   const buildMarkers = async (points: ReportPoint[]) => {
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
@@ -217,8 +213,9 @@ export function useReportsLayer(
     });
   };
 
-  const runFetch = () => {
+  const runFetch = async (force = false) => {
     if (!map || !enabledRef.current) return;
+
     const center = map.getCenter();
     if (!center) return;
 
@@ -229,8 +226,9 @@ export function useReportsLayer(
     const now = Date.now();
 
     const last = lastQueryRef.current;
-    let needFetch = !last;
-    if (last) {
+    let needFetch = force || !last;
+
+    if (!needFetch && last) {
       const moved = haversineMeters(
         { lat: last.lat, lng: last.lng },
         { lat, lng }
@@ -238,7 +236,13 @@ export function useReportsLayer(
       const movedEnough = moved > moveThresholdMeters(zoom);
       const levelChanged = last.level !== level;
       const cooledDown = now - last.ts > cooldownMs;
-      needFetch = (levelChanged || movedEnough) && cooledDown;
+
+      // 토글 직후 부착 마커가 없다면 강제 요청
+      const hasAttached = markersRef.current.some((m) => m.map != null);
+
+      needFetch =
+        (!hasAttached && enabledRef.current) ||
+        ((levelChanged || movedEnough) && cooledDown);
     }
     if (!needFetch) return;
 
@@ -247,74 +251,97 @@ export function useReportsLayer(
     inflightRef.current = ac;
     const myGen = ++genRef.current;
 
-    fetchReports({
-      latitude: lat,
-      longitude: lng,
-      zoomLevel: level,
-      signal: ac.signal,
-    })
-      .then(buildMarkers)
-      .then((markers) => {
-        if (!enabledRef.current || myGen !== genRef.current) return;
-        markersRef.current.forEach((m) => (m.map = null));
-        markersRef.current = [];
-        markers.forEach((m) => {
-          m.map = map!;
-          markersRef.current.push(m);
-        });
-        lastQueryRef.current = { lat, lng, level, ts: now };
-      })
-      .catch((e) => {
-        if (e?.name === "AbortError") return;
-        console.warn("[reports] fetch failed:", e);
+    try {
+      const points = await fetchReports({
+        latitude: lat,
+        longitude: lng,
+        zoomLevel: level,
+        signal: ac.signal,
       });
+
+      cacheRef.current = points;
+
+      const markers = await buildMarkers(points);
+
+      // 기존 마커 detach 후 교체
+      markersRef.current.forEach((m) => (m.map = null));
+      markersRef.current = markers;
+
+      if (!enabledRef.current || myGen !== genRef.current) return;
+
+      markersRef.current.forEach((m) => (m.map = map));
+      lastQueryRef.current = { lat, lng, level, ts: now };
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+      console.warn("[reports] fetch failed:", e);
+    }
   };
 
-  const trigger = (immediate = false) => {
+  const trigger = (immediate = false, force = false) => {
     if (!map || !enabledRef.current) return;
-    if (immediate) return void runFetch();
+    if (immediate) return void runFetch(force);
     if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = window.setTimeout(runFetch, 220);
+    debounceTimerRef.current = window.setTimeout(() => runFetch(force), 220);
   };
 
+  // 지도 이벤트
   useEffect(() => {
     if (!map) return;
-    const ls: google.maps.MapsEventListener[] = [];
-    ls.push(map.addListener("idle", () => trigger(false)));
-    listenersRef.current = ls;
 
-    if (enabledRef.current) trigger(true);
+    const idleL = map.addListener("idle", () => trigger(false));
+    // 초기 ON이면 즉시 강제 1회 로드
+    if (enabledRef.current) trigger(true, true);
 
     return () => {
       inflightRef.current?.abort();
       ++genRef.current;
+
       if (debounceTimerRef.current)
         window.clearTimeout(debounceTimerRef.current);
-      listenersRef.current.forEach((l) => l.remove());
-      listenersRef.current = [];
+
+      idleL.remove?.();
+
+      // 언마운트 시에만 완전 정리
       markersRef.current.forEach((m) => (m.map = null));
       markersRef.current = [];
+      cacheRef.current = null;
       lastQueryRef.current = null;
     };
   }, [map]);
 
+  // on/off 토글 (데이터 보존, detach/attach)
   useEffect(() => {
     if (!map) return;
+
     if (!enabled) {
       inflightRef.current?.abort();
       ++genRef.current;
-      markersRef.current.forEach((m) => (m.map = null));
-      markersRef.current = [];
+      markersRef.current.forEach((m) => (m.map = null)); // detach만
       return;
     }
-    trigger(true);
-  }, [enabled, map]);
+
+    // 켜질 때: 캐시가 있으면 즉시 복구, 이후 최신화
+    if (cacheRef.current && markersRef.current.length > 0) {
+      markersRef.current.forEach((m) => (m.map = map));
+      trigger(true, true); // 쿨다운 무시하고 갱신
+    } else if (cacheRef.current && markersRef.current.length === 0) {
+      (async () => {
+        const markers = await buildMarkers(cacheRef.current!);
+        markersRef.current = markers;
+        markersRef.current.forEach((m) => (m.map = map));
+        trigger(true); // 일반 갱신
+      })();
+    } else {
+      // 캐시 없음 → 강제 최초 로드
+      trigger(true, true);
+    }
+  }, [enabled, map, viewportKey]);
 
   return {
     enabled,
     show: () => setEnabled(true),
     hide: () => setEnabled(false),
     toggle: () => setEnabled((v) => !v),
-    reload: () => trigger(true),
+    reload: (opts?: { force?: boolean }) => trigger(true, !!opts?.force),
   };
 }

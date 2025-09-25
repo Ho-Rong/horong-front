@@ -319,7 +319,7 @@ export default function PhysicsBallsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const handleGoToHome = () => {
-    router.push("/home");
+    router.replace("/");
   };
 
   const handleFetchUserDataDirect = async () => {
