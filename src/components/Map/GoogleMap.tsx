@@ -9,12 +9,25 @@ import { useLightsLayer } from "@/hooks/useLightsLayer";
 import { useCctvLayer } from "@/hooks/useCctvLayer";
 import Lottie from "lottie-react";
 import farmAnim from "@/lotties/farm.json";
+import { useModal } from "@/hooks/useModal";
 import { useReportsLayer } from "@/hooks/useReportsLayer";
+import { ReportModal } from "../Modals/ReportModal";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
 
+interface ReportData {
+  description: string;
+  images: File[];
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
+}
+
 export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
+  const { isOpen, open, close } = useModal();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const myMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
     null
@@ -25,6 +38,13 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
 
   const [ready, setReady] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+
+  const handleReport = (data: ReportData) => {
+    // 여기서 실제 API 호출
+    // await reportAPI.submit(data);
+
+    alert("신고가 접수되었습니다.");
+  };
 
   const cctv = useCctvLayer(map, {
     initialEnabled: false,
@@ -273,7 +293,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         <HStack gap={"$600"} alignItems={"center"}>
           <VStack marginLeft="100px" textAlign={"center"} gap={"$050"}>
             <button
-              onClick={() => console.log("신고하기 모달")}
+              onClick={open}
               style={{
                 width: 90, // IconButton 크기랑 통일
                 height: 90,
@@ -401,6 +421,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           </IconButton>
         </HStack>
       </div>
+      <ReportModal isOpen={isOpen} onClose={close} onReport={handleReport} />
     </div>
   );
 }
