@@ -5,57 +5,43 @@ import { SpeedDial } from "../SpeedDial/SpeedDial";
 import {
   MarkerClusterer,
   SuperClusterAlgorithm,
-  type Cluster,
   type Renderer,
 } from "@googlemaps/markerclusterer";
 import { Icon } from "../Icon/Icon";
 import { renderToStaticMarkup } from "react-dom/server";
-import { getClusterSizeByCount } from "@/utils/cluster-size";
-import { createCssGlowCluster } from "./css-glow-cluster";
-import { HStack, IconButton, VStack } from "@vapor-ui/core";
+import { getClusterSizeByCount } from "@/utils/cluster-size"; // returns "small" | "medium" | "large"
+import { createCssGlowCluster } from "./css-glow-cluster"; // accepts "small" | "medium" | "large"
+import { HStack, IconButton, VStack, Text } from "@vapor-ui/core";
 import { HomeIcon } from "@vapor-ui/icons";
-import { Text } from "@vapor-ui/core";
-type Place = { lat: number; lng: number; name: string };
+import {
+  fetchLights,
+  mapZoomToLevel,
+  type LightPoint,
+} from "@/hooks/lights-api";
+import { useLightsLayer } from "@/hooks/useLightsLayer";
+import { useCctvLayer } from "@/hooks/useCctvLayer";
 
 const SLIGHT_ZOOM_IN = 0.4;
+const FOLLOW_ZOOM = 19;
 
 export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const clustererRef = useRef<MarkerClusterer | null>(null);
   const myMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
     null
   );
-  const initializedRef = useRef(false);
-
   const watchIdRef = useRef<number | null>(null);
   const firstFixRef = useRef(true);
+  const initializedRef = useRef(false);
 
   const [ready, setReady] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
-  // 🔸 제주도 내 랜덤 목데이터(초기 테스트용: 80개)
-  const mockPlaces: Place[] = randomJejuPoints(80);
+  const cctv = useCctvLayer(map, {
+    initialEnabled: false, // 시작은 OFF
+    cooldownMs: 700, // 필요시 조절
+  });
 
-  // 현재 위치 기반 테스트용
-  const nearbyPlaces: Place[] = [
-    { lat: 0, lng: 0, name: "주변 포인트1" },
-    { lat: 0, lng: 0, name: "주변 포인트2" },
-  ];
-
-  // ---- 유틸: 랜덤 제주 포인트 ----
-  function randomJejuPoints(count: number): Place[] {
-    const pts: Place[] = [];
-    for (let i = 0; i < count; i++) {
-      const lat = 33.1 + Math.random() * 0.5; // 대략 범위
-      const lng = 126.2 + Math.random() * 0.7;
-      pts.push({ lat, lng, name: `포인트 ${i + 1}` });
-    }
-    return pts;
-  }
-
-  // ---- 캔버스 준비 ----
+  // 캔버스 준비
   useEffect(() => {
     if (!canvasRef.current) return;
     const ro = new ResizeObserver(([e]) => {
@@ -66,7 +52,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     return () => ro.disconnect();
   }, []);
 
-  // ---- 지도 초기화 + Lottie 클러스터러 ----
+  // 지도 초기화
   useEffect(() => {
     if (!ready || initializedRef.current || !canvasRef.current) return;
     initializedRef.current = true;
@@ -75,10 +61,6 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       const { Map } = (await google.maps.importLibrary(
         "maps"
       )) as google.maps.MapsLibrary;
-      const { AdvancedMarkerElement } = (await google.maps.importLibrary(
-        "marker"
-      )) as google.maps.MarkerLibrary;
-
       const map = new Map(canvasRef.current!, {
         center: { lat: 33.38, lng: 126.55 },
         zoom: 18,
@@ -87,7 +69,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         disableDefaultUI: true,
         gestureHandling: "greedy",
       });
-      mapRef.current = map;
+      setMap(map); // ✅ 훅에 전달될 state 업데이트
 
       // 제주 경계 맞추기
       const sw = new google.maps.LatLng(33.05, 126.14);
@@ -95,97 +77,38 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       const bounds = new google.maps.LatLngBounds(sw, ne);
       map.fitBounds(bounds);
 
-      // ✅ fitBounds 이후, idle 시점에 '살짝 확대'
+      // fit 이후 살짝 확대
       google.maps.event.addListenerOnce(map, "idle", () => {
         const current = map.getZoom() ?? 9;
-        // 클러스터 해제 임계치(10) 바로 아래로 유지
         const target = Math.min(10 - 0.2, current + SLIGHT_ZOOM_IN);
         map.setZoom(target);
       });
-
-      // ✅ 개별 마커는 'map'에 직접 붙이지 말고 clusterer에만 넘긴다!
-      const baseMarkers = mockPlaces.map((p) => {
-        const html = renderToStaticMarkup(
-          <Icon name="streetLight" size={20} color="#FFD60A" />
-        );
-        const container = document.createElement("div");
-        container.innerHTML = html;
-
-        return new google.maps.marker.AdvancedMarkerElement({
-          position: { lat: p.lat, lng: p.lng },
-          title: p.name,
-          content: container.firstChild as HTMLElement,
-        });
-      });
-
-      const CLUSTER_MAX_ZOOM = 10; // 이 줌을 넘으면 개별 마커로 풀림
-      const CLUSTER_RADIUS_PX = 130;
-
-      const renderer: google.maps.marker.Renderer = {
-        render: ({
-          count,
-          position,
-        }: {
-          count: number;
-          position: google.maps.LatLngLiteral;
-        }) => {
-          const sizeKey = getClusterSizeByCount(count);
-          const latQ = Math.round(position.lat * 1e4);
-          const lngQ = Math.round(position.lng * 1e4);
-          const seed =
-            (latQ * 73856093) ^ (lngQ * 19349663) ^ (count * 83492791);
-
-          // 밝은 지도면 blend:"normal"로 바꿔도 됨
-          const content = createCssGlowCluster(sizeKey, {
-            seed,
-            blend: "screen",
-          });
-
-          return new google.maps.marker.AdvancedMarkerElement({
-            position,
-            content,
-            zIndex: 1000 + Math.min(count, 999),
-          });
-        },
-      };
-
-      clustererRef.current = new MarkerClusterer({
-        map,
-        markers: baseMarkers,
-        renderer,
-        algorithm: new SuperClusterAlgorithm({
-          minPoints: 1,
-          maxZoom: CLUSTER_MAX_ZOOM,
-          radius: CLUSTER_RADIUS_PX,
-        }),
-      });
     })();
 
-    // (선택) 언마운트/리셋 시 정리
     return () => {
       try {
-        if (clustererRef.current) {
-          clustererRef.current.clearMarkers();
-          clustererRef.current = null;
-        }
         if (myMarkerRef.current) {
-          (myMarkerRef.current as any).map = null;
+          myMarkerRef.current.map = null;
           myMarkerRef.current = null;
         }
-
         if (watchIdRef.current != null) {
           navigator.geolocation.clearWatch(watchIdRef.current);
           watchIdRef.current = null;
         }
-        mapRef.current = null;
+        setMap(null);
       } catch {}
     };
   }, [ready, mapId]);
 
-  // ---- 현재 위치 따라가기 + 주변 포인트는 clusterer에 추가 ----
-  const startFollow = async () => {
-    if (!mapRef.current) return;
+  // ✅ 가로등 레이어 훅: 줌 20 이상이면 개별 마커, 그 외엔 클러스터
+  const lights = useLightsLayer(map, {
+    initialEnabled: true,
+    cooldownMs: 700,
+  });
 
+  // 현재 위치 따라가기
+  const startFollow = async () => {
+    if (!map) return;
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
       "marker"
     )) as google.maps.MarkerLibrary;
@@ -201,12 +124,11 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       return dot;
     };
 
-    // 이전 구독이 있으면 정리(재시작 대비)
     if (watchIdRef.current != null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    firstFixRef.current = true; // 새 추적 시작 시 초기화
+    firstFixRef.current = true;
 
     if (!("geolocation" in navigator)) {
       console.warn("Geolocation을 지원하지 않는 브라우저입니다.");
@@ -215,11 +137,9 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
 
     const onPos: PositionCallback = (p) => {
       const here = { lat: p.coords.latitude, lng: p.coords.longitude };
-
-      // 현재 위치 마커 upsert
       if (!myMarkerRef.current) {
         myMarkerRef.current = new AdvancedMarkerElement({
-          map: mapRef.current!,
+          map,
           position: here,
           title: "현재 위치",
           content: makeDot(),
@@ -228,36 +148,13 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         myMarkerRef.current.position = here;
       }
 
-      // 지도 이동: 첫 fix 때는 연출(zoom/tilt/heading), 이후에는 center만
       if (firstFixRef.current) {
-        mapRef.current!.moveCamera({ center: here, zoom: 19, tilt: 67.5 });
-        mapRef.current!.setHeading(45);
-
-        // 주변 포인트는 첫 fix 시 1회만 추가
-        if (nearbyPlaces.length > 0) {
-          const nearMock: Place[] = nearbyPlaces.map((n, i) => ({
-            ...n,
-            lat: here.lat + (Math.random() - 0.5) * 0.01,
-            lng: here.lng + (Math.random() - 0.5) * 0.01,
-            name: `주변 포인트 ${i + 1}`,
-          }));
-          const newMarkers = nearMock.map(
-            (p2) =>
-              new google.maps.marker.AdvancedMarkerElement({
-                position: { lat: p2.lat, lng: p2.lng },
-                title: p2.name,
-              })
-          );
-          clustererRef.current?.addMarkers(newMarkers);
-        }
-
+        map.moveCamera({ center: here, zoom: FOLLOW_ZOOM, tilt: 67.5 });
+        map.setHeading(45);
         firstFixRef.current = false;
       } else {
-        // 빠르고 잦은 갱신에 유리: 줌/틸트 유지 + 센터만 이동
-        mapRef.current!.moveCamera({ center: here });
+        map.moveCamera({ center: here });
       }
-
-      setIsFollowing(true);
     };
 
     const onErr: PositionErrorCallback = (err) => {
@@ -272,10 +169,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   };
 
   return (
-    <div
-      ref={wrapperRef}
-      style={{ width: "100%", height: "100vh", position: "relative" }}
-    >
+    <div style={{ width: "100%", height: "100vh", position: "relative" }}>
       <div
         ref={canvasRef}
         style={{ width: "100%", height: "100%", overflow: "hidden" }}
@@ -348,9 +242,23 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
               {
                 id: "star",
                 label: "가로등",
-                onClick: () => console.log("star"),
+                onClick: () => {
+                  // 가로등만 켜두고 CCTV는 끄기
+                  cctv.hide();
+                  lights.toggle();
+                  if (!lights.enabled) lights.show(); // label 갱신 타이밍 고려해 안전하게
+                },
               },
-              { id: "cctv", label: "CCTV", onClick: () => console.log("cctv") },
+              {
+                id: "cctv",
+                label: "CCTV",
+                onClick: () => {
+                  // CCTV 켜면 가로등은 끄기
+                  lights.hide();
+                  cctv.toggle();
+                  if (!cctv.enabled) cctv.show();
+                },
+              },
               {
                 id: "notice",
                 label: "신고",

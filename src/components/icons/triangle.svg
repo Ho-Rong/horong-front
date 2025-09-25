@@ -1,0 +1,9 @@
+<svg width="48" height="42" viewBox="0 0 48 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+<foreignObject x="-4" y="-4" width="56" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="backdrop-filter:blur(2px);clip-path:url(#bgblur_0_31218_5953_clip_path);height:100%;width:100%"></div></foreignObject><path data-figma-bg-blur-radius="4" d="M20.2243 2.14285C21.9024 -0.714288 26.0976 -0.714283 27.7757 2.14286L47.4094 35.5714C49.0875 38.4286 46.9899 42 43.6337 42H4.36631C1.01013 42 -1.08748 38.4286 0.590609 35.5714L20.2243 2.14285Z" fill="url(#paint0_linear_31218_5953)" fill-opacity="0.6"/>
+<defs>
+<clipPath id="bgblur_0_31218_5953_clip_path" transform="translate(4 4)"><path d="M20.2243 2.14285C21.9024 -0.714288 26.0976 -0.714283 27.7757 2.14286L47.4094 35.5714C49.0875 38.4286 46.9899 42 43.6337 42H4.36631C1.01013 42 -1.08748 38.4286 0.590609 35.5714L20.2243 2.14285Z"/>
+</clipPath><linearGradient id="paint0_linear_31218_5953" x1="10" y1="12" x2="24" y2="42" gradientUnits="userSpaceOnUse">
+<stop offset="1" stop-color="#F86571"/>
+</linearGradient>
+</defs>
+</svg>

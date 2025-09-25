@@ -4,6 +4,8 @@ import NotifyIcon from "./notify2.svg";
 import LocationIcon from "./location.svg";
 import StarIcon from "./star.svg";
 import CctvIcon from "./cctv.svg";
+import triangleIcon from "./triangle.svg";
+
 // 아이콘 매핑 객체
 export const iconMap = {
   delete: DeleteIcon,
@@ -12,4 +14,5 @@ export const iconMap = {
   location: LocationIcon,
   star: StarIcon,
   cctv: CctvIcon,
+  triangle: triangleIcon,
 };
