@@ -11,7 +11,7 @@ import Lottie from "lottie-react";
 import farmAnim from "@/lotties/farm.json";
 import { useModal } from "@/hooks/useModal";
 import { useReportsLayer } from "@/hooks/useReportsLayer";
-import { ReportModal } from "../Modals/ReportModal";
+import { ReportModal } from "../modals/ReportModal";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
