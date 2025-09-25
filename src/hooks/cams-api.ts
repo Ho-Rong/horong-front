@@ -36,18 +36,18 @@ export function mapZoomToLevel(zoom: number): ZoomLevel {
 export function gridSizeForLevel(level: ZoomLevel): number {
   switch (level) {
     case "ZOOM_1":
-      return 0.01; // 가장 세밀
+      return 999;
     case "ZOOM_2":
-      return 0.005;
+      return 999;
     case "ZOOM_3":
-      return 0.01;
+      return 500;
     case "ZOOM_4":
-      return 0.05;
+      return 100;
     case "ZOOM_5":
-      return 0.1;
+      return 100;
     case "ZOOM_6":
     default:
-      return 0.2; // 가장 넓음
+      return 20; // 가장 넓음
   }
 }
 
