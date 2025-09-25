@@ -18,7 +18,6 @@ export const HorongSuccess: React.FC<HorongSuccessProps> = ({
   if (!isOpen) return null;
 
   const handleGoToFarm = () => {
-    onClose(); // 모달 먼저 닫기
     router.push("/farm"); // /farm 페이지로 이동
   };
 
