@@ -13,6 +13,12 @@ import { useModal } from "@/hooks/useModal";
 import { useReportsLayer } from "@/hooks/useReportsLayer";
 import { ReportModal } from "../modals/ReportModal";
 import { useRouter } from "next/navigation";
+import {
+  clampZoomTemporarily,
+  lockZoomAround,
+  shrinkBoundsByZoom,
+} from "@/utils/shrinkBoundsByZoom";
+import slightZoomInOnce from "@/utils/shrinkBoundsByZoom";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
@@ -37,6 +43,8 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   const watchIdRef = useRef<number | null>(null);
   const firstFixRef = useRef(true);
   const initializedRef = useRef(false);
+
+  const didInitialSlightZoomRef = useRef(false);
 
   const [ready, setReady] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -79,7 +87,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       )) as google.maps.MapsLibrary;
       const map = new Map(canvasRef.current!, {
         center: { lat: 33.38, lng: 126.55 },
-        zoom: 18,
+        //zoom: 18,
         mapId,
         colorScheme: google.maps.ColorScheme.LIGHT,
         disableDefaultUI: true,
@@ -91,14 +99,31 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       const sw = new google.maps.LatLng(33.05, 126.14);
       const ne = new google.maps.LatLng(33.62, 126.98);
       const bounds = new google.maps.LatLngBounds(sw, ne);
-      map.fitBounds(bounds);
+      const adjusted = shrinkBoundsByZoom(bounds, SLIGHT_ZOOM_IN);
+      map.fitBounds(adjusted);
+
+      // ✅ 프로젝션 준비 후 맞추기
+      google.maps.event.addListenerOnce(map, "projection_changed", () => {
+        map.fitBounds(adjusted);
+      });
+
+      // ✅ fit 이후 첫 idle에서 줌 잠깐 락 + 살짝 확대(1회)
+      google.maps.event.addListenerOnce(map, "idle", () => {
+        // 현재 줌 잠깐 고정 (지도 내부 로직이 줌을 흔드는 걸 방지)
+        const z = map.getZoom() ?? 10;
+        clampZoomTemporarily(map, z, 280);
+
+        // 락이 풀린 직후 한 번만 SLIGHT_ZOOM_IN 적용
+        window.setTimeout(() => {
+          slightZoomInOnce(map, SLIGHT_ZOOM_IN, didInitialSlightZoomRef);
+        }, 300);
+      });
 
       // fit 이후 살짝 확대
-      google.maps.event.addListenerOnce(map, "idle", () => {
+      /*google.maps.event.addListenerOnce(map, "idle", () => {
         const current = map.getZoom() ?? 9;
-        const target = Math.min(10 - 0.2, current + SLIGHT_ZOOM_IN);
-        map.setZoom(target);
-      });
+        map.moveCamera({ zoom: current + SLIGHT_ZOOM_IN }); // 0.4 유지
+      });*/
     })();
 
     return () => {
@@ -190,19 +215,14 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     if (!map) return;
 
     const refetchAll = () => {
-      // 맵이 offscreen->onscreen 될 때 렌더 보정
       const c = map.getCenter();
-      if (c) map.moveCamera({ center: c, zoom: map.getZoom() ?? 10 }); // ✅ 강제 리레이아웃 유도
-
-      // ✅ 보여줘야 하는 레이어 재요청
-      // (useLightsLayer는 triggerReload, CCTV/Reports는 reload 노출)
+      if (c) map.moveCamera({ center: c }); // ← zoom 파라미터 넣지 않기!
       setTimeout(() => {
         if (lights.enabled) lights.triggerReload?.();
         if (cctv.enabled) cctv.reload?.();
         if (report.enabled) report.reload?.();
       }, 0);
     };
-
     const onFocus = () => refetchAll();
     const onVisible = () => !document.hidden && refetchAll();
 
@@ -297,28 +317,37 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
               {
                 id: "star",
                 label: "가로등",
-                onClick: () => {
+                onClick: async () => {
+                  if (!map) return;
+                  await lockZoomAround(map, 320);
                   cctv.hide();
                   report.hide();
                   lights.show();
+                  lights.reload({ force: true });
                 },
               },
               {
                 id: "cctv",
                 label: "CCTV",
-                onClick: () => {
+                onClick: async () => {
+                  if (!map) return;
+                  await lockZoomAround(map, 320);
                   lights.hide();
                   report.hide();
                   cctv.show();
+                  cctv.reload({ force: true });
                 },
               },
               {
                 id: "notice",
                 label: "신고",
-                onClick: () => {
+                onClick: async () => {
+                  if (!map) return;
+                  await lockZoomAround(map, 320);
                   lights.hide();
                   cctv.hide();
                   report.show();
+                  report.reload({ force: true });
                 },
               },
             ]}
