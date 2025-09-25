@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as styles from "./styles.css";
-import characterAnimation from "./characters/character.json";
+import characterAnimation from "./characters/character-1.json";
 import Character from "./components/Character";
 
 interface PhysicsBallInstance {
@@ -330,46 +330,14 @@ export default function PhysicsBallsPage() {
     <div className={styles.container} ref={containerRef}>
       <div className={styles.ground} />
 
-      <Character
-        animationData={characterAnimation}
-        dataBall="0"
-        characterIndex={0}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="1"
-        characterIndex={1}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="2"
-        characterIndex={2}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="3"
-        characterIndex={3}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="4"
-        characterIndex={4}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="5"
-        characterIndex={5}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="6"
-        characterIndex={6}
-      />
-      <Character
-        animationData={characterAnimation}
-        dataBall="7"
-        characterIndex={7}
-      />
+      <Character characterId={1} dataBall="0" characterIndex={0} />
+      <Character characterId={2} dataBall="1" characterIndex={1} />
+      <Character characterId={3} dataBall="2" characterIndex={2} />
+      <Character characterId={4} dataBall="3" characterIndex={3} />
+      <Character characterId={5} dataBall="4" characterIndex={4} />
+      <Character characterId={6} dataBall="5" characterIndex={5} />
+      <Character characterId={7} dataBall="6" characterIndex={6} />
+      <Character characterId={8} dataBall="7" characterIndex={7} />
     </div>
   );
 }
