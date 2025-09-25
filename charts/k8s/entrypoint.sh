@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 echo "Sourcing environment variables from /app/env/config.env"
 
