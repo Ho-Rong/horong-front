@@ -211,7 +211,7 @@ class PhysicsBall implements PhysicsBallInstance {
         otherBall.x -= Math.cos(angle) * separationForce;
         otherBall.y -= Math.sin(angle) * separationForce;
 
-        const slideForce = 0.5;
+        const slideForce = 0.05;
         const perpAngle = angle + Math.PI / 2;
 
         this.vy += slideForce;
