@@ -15,6 +15,10 @@ export const container = style({
   width: "100%",
   height: "100vh",
   overflow: "hidden",
+  backgroundImage: "url('/farm-background.png')",
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+  backgroundRepeat: "no-repeat",
 });
 
 export const ground = style({
