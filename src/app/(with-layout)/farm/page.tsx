@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as styles from "./styles.css";
-import characterAnimation from "./characters/character-1.json";
 import Character from "./components/Character";
+import { Button } from "@vapor-ui/core";
+import { useRouter } from "next/navigation";
+
+// API 응답 타입 정의
+interface UserData {
+  name: string;
+  ownCharacters: number[];
+}
 
 interface PhysicsBallInstance {
   element: HTMLElement;
@@ -222,8 +229,8 @@ class PhysicsBall implements PhysicsBallInstance {
           Math.cos(perpAngle) * slideForce * (Math.random() - 0.5);
 
         const containerRect = this.container.getBoundingClientRect();
-        this.x = Math.max(0, Math.min(this.x, containerRect.width - 150)); // 120 → 80
-        this.y = Math.max(0, Math.min(this.y, containerRect.height - 150)); // 120 → 80
+        this.x = Math.max(0, Math.min(this.x, containerRect.width - 150));
+        this.y = Math.max(0, Math.min(this.y, containerRect.height - 150));
         otherBall.x = Math.max(
           0,
           Math.min(otherBall.x, containerRect.width - 150)
@@ -262,10 +269,89 @@ class PhysicsBall implements PhysicsBallInstance {
   }
 }
 
+// API 호출 함수들
+const fetchUserData = async (): Promise<UserData | null> => {
+  try {
+    const response = await fetch("/api/user", {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: UserData = await response.json();
+    return data;
+  } catch (error) {
+    console.error("API 호출 실패:", error);
+    return null;
+  }
+};
+
+// 다른 방식의 API 호출 (axios 스타일, 하지만 fetch 기반)
+const apiClient = {
+  get: async (url: string) => {
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "*/*",
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("API 요청 실패:", error);
+      throw error;
+    }
+  },
+};
+
 export default function PhysicsBallsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-
   const animationRef = useRef<number | undefined>(undefined);
+  const router = useRouter();
+
+  const handleGoToHome = () => {
+    router.push("/home"); // /farm 페이지로 이동
+  };
+
+  // API 데이터를 위한 상태
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // API 호출 함수
+  const handleFetchUserData = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchUserData();
+      setUserData(data);
+      console.log("사용자 데이터:", data);
+    } catch (err) {
+      setError("데이터를 불러오는데 실패했습니다.");
+      console.error("데이터 로드 에러:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 컴포넌트 마운트 시 자동으로 API 호출 (선택사항)
+  useEffect(() => {
+    // 자동 로드를 원한다면 주석 해제
+    // handleFetchUserData();
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -328,8 +414,50 @@ export default function PhysicsBallsPage() {
 
   return (
     <div className={styles.container} ref={containerRef}>
+      <Button onClick={handleGoToHome}>홈으로 가기</Button>
       <div className={styles.ground} />
 
+      {/* API 테스트 UI */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          zIndex: 1000,
+          background: "rgba(255,255,255,0.9)",
+          padding: "10px",
+          borderRadius: "5px",
+          fontSize: "14px",
+        }}
+      >
+        <button
+          onClick={handleFetchUserData}
+          disabled={isLoading}
+          style={{
+            padding: "5px 10px",
+            marginBottom: "10px",
+            cursor: isLoading ? "not-allowed" : "pointer",
+          }}
+        >
+          {isLoading ? "로딩 중..." : "API 호출 테스트"}
+        </button>
+
+        {error && (
+          <div style={{ color: "red", marginBottom: "10px" }}>
+            에러: {error}
+          </div>
+        )}
+
+        {userData && (
+          <div>
+            <strong>사용자 정보:</strong>
+            <div>이름: {userData.name}</div>
+            <div>보유 캐릭터: [{userData.ownCharacters.join(", ")}]</div>
+          </div>
+        )}
+      </div>
+
+      {/* 기존 캐릭터들 - userData가 있다면 보유 캐릭터만 표시하거나 다르게 스타일링 가능 */}
       <Character characterId={1} dataBall="0" characterIndex={0} />
       <Character characterId={2} dataBall="1" characterIndex={1} />
       <Character characterId={3} dataBall="2" characterIndex={2} />
