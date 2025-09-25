@@ -54,3 +54,21 @@ export const character = style({
     },
   },
 });
+
+export const Iconback = style({
+  position: "absolute",
+  top: "20px",
+  right: "20px",
+  zIndex: 100,
+  display: "flex",
+  width: "70px",
+  height: "70px",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: "var(--vapor-size-space-075)",
+  flexShrink: 0,
+  borderRadius: "999px",
+  border: "0.5px solid #FFF",
+  background: "rgba(255, 255, 255, 0.20)",
+  backdropFilter: "blur(2px)",
+});

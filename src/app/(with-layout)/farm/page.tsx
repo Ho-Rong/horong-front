@@ -5,6 +5,7 @@ import * as styles from "./styles.css";
 import Character from "./components/Character";
 import { Button } from "@vapor-ui/core";
 import { useRouter } from "next/navigation";
+import { HomeIcon } from "@vapor-ui/icons";
 
 interface UserData {
   name: string;
@@ -405,7 +406,9 @@ export default function PhysicsBallsPage() {
 
   return (
     <div className={styles.container} ref={containerRef}>
-      <Button onClick={handleGoToHome}>홈으로 가기</Button>
+      <button className={styles.Iconback} onClick={handleGoToHome}>
+        <HomeIcon style={{ width: "40px", height: "40px", fill: "#fff" }} />
+      </button>
 
       <div className={styles.ground} />
 
