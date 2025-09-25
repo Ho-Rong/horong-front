@@ -3,8 +3,8 @@ import { style } from "@vanilla-extract/css";
 
 export const root = style({
   position: "absolute",
-  left: 12,
-  bottom: 27.5,
+  left: 44,
+  bottom: 27,
   zIndex: 6,
 });
 

@@ -12,6 +12,7 @@ import farmAnim from "@/lotties/farm.json";
 import { useModal } from "@/hooks/useModal";
 import { useReportsLayer } from "@/hooks/useReportsLayer";
 import { ReportModal } from "../modals/ReportModal";
+import { useRouter } from "next/navigation";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
@@ -28,6 +29,7 @@ interface ReportData {
 
 export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   const { isOpen, open, close } = useModal();
+  const router = useRouter();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const myMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
     null
@@ -184,8 +186,40 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     });
   };
 
+  useEffect(() => {
+    if (!map) return;
+
+    const refetchAll = () => {
+      // 맵이 offscreen->onscreen 될 때 렌더 보정
+      const c = map.getCenter();
+      if (c) map.moveCamera({ center: c, zoom: map.getZoom() ?? 10 }); // ✅ 강제 리레이아웃 유도
+
+      // ✅ 보여줘야 하는 레이어 재요청
+      // (useLightsLayer는 triggerReload, CCTV/Reports는 reload 노출)
+      setTimeout(() => {
+        if (lights.enabled) lights.triggerReload?.();
+        if (cctv.enabled) cctv.reload?.();
+        if (report.enabled) report.reload?.();
+      }, 0);
+    };
+
+    const onFocus = () => refetchAll();
+    const onVisible = () => !document.hidden && refetchAll();
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+
+    // 처음 mount 되었을 때도 한번
+    refetchAll();
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [map, lights.enabled, cctv.enabled, report.enabled]);
+
   return (
-    <div style={{ width: "100%", height: "100vh", position: "relative" }}>
+    <div style={{ width: "100%", height: "100dvh", position: "relative" }}>
       <div
         ref={canvasRef}
         style={{ width: "100%", height: "100%", overflow: "hidden" }}
@@ -221,7 +255,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       <IconButton
         variant="ghost"
         size="xl"
-        onClick={() => console.log("농장으로 가기")}
+        onClick={() => router.push("/farm")}
         style={{
           position: "absolute",
           right: 19,
@@ -247,12 +281,13 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       <div
         style={{
           position: "absolute",
-          left: 44,
-          width: "100%",
-
           bottom: "max(60px, env(safe-area-inset-bottom, 0px) + 12px)",
+          width: "100%",
           display: "flex",
+          justifyContent: "space-between",
           alignItems: "center",
+          paddingRight: "44px",
+          paddingLeft: "80px",
           pointerEvents: "auto",
         }}
       >
@@ -290,136 +325,131 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           />
         </div>
 
-        <HStack gap={"$600"} alignItems={"center"}>
-          <VStack marginLeft="100px" textAlign={"center"} gap={"$050"}>
-            <button
-              onClick={open}
-              style={{
-                width: 90, // IconButton 크기랑 통일
-                height: 90,
-                cursor: "pointer",
-                zIndex: 6,
-              }}
+        <VStack textAlign={"center"}>
+          <button
+            onClick={open}
+            style={{
+              width: 90, // IconButton 크기랑 통일
+              height: 90,
+              cursor: "pointer",
+              zIndex: 6,
+            }}
+          >
+            <svg
+              width="100"
+              height="100"
+              viewBox="0 0 120 120"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <svg
-                width="100"
-                height="100"
-                viewBox="0 0 120 120"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <g opacity="0.6" filter="url(#filter0_f_31066_13663)">
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="50"
-                    fill="url(#paint0_linear_31066_13663)"
-                  />
-                </g>
+              <g opacity="0.6" filter="url(#filter0_f_31066_13663)">
                 <circle
                   cx="60"
                   cy="60"
-                  r="39.5"
-                  fill="url(#paint1_linear_31066_13663)"
-                  stroke="url(#paint2_linear_31066_13663)"
+                  r="50"
+                  fill="url(#paint0_linear_31066_13663)"
                 />
-                <path
-                  d="M52.6573 64.1633H50.6982C49.6206 64.1633 48.6982 63.7796 47.9308 63.0122C47.1635 62.2449 46.7798 61.3224 46.7798 60.2449V56.3265C46.7798 55.249 47.1635 54.3265 47.9308 53.5592C48.6982 52.7918 49.6206 52.4082 50.6982 52.4082H58.5349L65.3431 48.2939C65.9961 47.902 66.6573 47.902 67.3267 48.2939C67.9961 48.6857 68.3308 49.2571 68.3308 50.0082V66.5633C68.3308 67.3143 67.9961 67.8857 67.3267 68.2776C66.6573 68.6694 65.9961 68.6694 65.3431 68.2776L58.5349 64.1633H56.5757V70.0408C56.5757 70.5959 56.3879 71.0612 56.0124 71.4367C55.6369 71.8122 55.1716 72 54.6165 72C54.0614 72 53.5961 71.8122 53.2206 71.4367C52.8451 71.0612 52.6573 70.5959 52.6573 70.0408V64.1633ZM70.29 64.849V51.7224C71.1716 52.5061 71.8818 53.4612 72.4206 54.5878C72.9594 55.7143 73.2288 56.9469 73.2288 58.2857C73.2288 59.6245 72.9594 60.8571 72.4206 61.9837C71.8818 63.1102 71.1716 64.0653 70.29 64.849Z"
-                  fill="white"
-                />
-                <defs>
-                  <filter
-                    id="filter0_f_31066_13663"
-                    x="0"
-                    y="0"
-                    width="120"
-                    height="120"
-                    filterUnits="userSpaceOnUse"
-                    color-interpolation-filters="sRGB"
-                  >
-                    <feFlood flood-opacity="0" result="BackgroundImageFix" />
-                    <feBlend
-                      mode="normal"
-                      in="SourceGraphic"
-                      in2="BackgroundImageFix"
-                      result="shape"
-                    />
-                    <feGaussianBlur
-                      stdDeviation="5"
-                      result="effect1_foregroundBlur_31066_13663"
-                    />
-                  </filter>
-                  <linearGradient
-                    id="paint0_linear_31066_13663"
-                    x1="20.9998"
-                    y1="2.00008"
-                    x2="67.3274"
-                    y2="138.119"
-                    gradientUnits="userSpaceOnUse"
-                  >
-                    <stop stop-color="#FBFBFB" />
-                    <stop offset="0.374839" stop-color="#D98D93" />
-                    <stop offset="0.592469" stop-color="#9262EA" />
-                    <stop offset="0.78" stop-color="#4633C3" />
-                    <stop offset="1" stop-color="#162A4B" />
-                  </linearGradient>
-                  <linearGradient
-                    id="paint1_linear_31066_13663"
-                    x1="19.9994"
-                    y1="6.00023"
-                    x2="65.8615"
-                    y2="122.495"
-                    gradientUnits="userSpaceOnUse"
-                  >
-                    <stop stop-color="#FBFBFB" />
-                    <stop offset="0.25" stop-color="#D98D93" />
-                    <stop offset="0.468842" stop-color="#9262EA" />
-                    <stop offset="0.78" stop-color="#4633C3" />
-                    <stop offset="0.975" stop-color="#162A4B" />
-                  </linearGradient>
-                  <linearGradient
-                    id="paint2_linear_31066_13663"
-                    x1="65.8621"
-                    y1="20"
-                    x2="65.8621"
-                    y2="122.495"
-                    gradientUnits="userSpaceOnUse"
-                  >
-                    <stop stop-color="#FBFBFB" />
-                    <stop offset="0.25" stop-color="#D98D93" />
-                    <stop offset="0.625" stop-color="#9262EA" />
-                    <stop offset="0.78" stop-color="#4633C3" />
-                    <stop offset="0.975" stop-color="#162A4B" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </button>
-            <Text
-              typography="body2"
-              style={{ color: "#fff", marginLeft: "5px" }}
-            >
-              신고하기
-            </Text>
-          </VStack>
+              </g>
+              <circle
+                cx="60"
+                cy="60"
+                r="39.5"
+                fill="url(#paint1_linear_31066_13663)"
+                stroke="url(#paint2_linear_31066_13663)"
+              />
+              <path
+                d="M52.6573 64.1633H50.6982C49.6206 64.1633 48.6982 63.7796 47.9308 63.0122C47.1635 62.2449 46.7798 61.3224 46.7798 60.2449V56.3265C46.7798 55.249 47.1635 54.3265 47.9308 53.5592C48.6982 52.7918 49.6206 52.4082 50.6982 52.4082H58.5349L65.3431 48.2939C65.9961 47.902 66.6573 47.902 67.3267 48.2939C67.9961 48.6857 68.3308 49.2571 68.3308 50.0082V66.5633C68.3308 67.3143 67.9961 67.8857 67.3267 68.2776C66.6573 68.6694 65.9961 68.6694 65.3431 68.2776L58.5349 64.1633H56.5757V70.0408C56.5757 70.5959 56.3879 71.0612 56.0124 71.4367C55.6369 71.8122 55.1716 72 54.6165 72C54.0614 72 53.5961 71.8122 53.2206 71.4367C52.8451 71.0612 52.6573 70.5959 52.6573 70.0408V64.1633ZM70.29 64.849V51.7224C71.1716 52.5061 71.8818 53.4612 72.4206 54.5878C72.9594 55.7143 73.2288 56.9469 73.2288 58.2857C73.2288 59.6245 72.9594 60.8571 72.4206 61.9837C71.8818 63.1102 71.1716 64.0653 70.29 64.849Z"
+                fill="white"
+              />
+              <defs>
+                <filter
+                  id="filter0_f_31066_13663"
+                  x="0"
+                  y="0"
+                  width="120"
+                  height="120"
+                  filterUnits="userSpaceOnUse"
+                  color-interpolation-filters="sRGB"
+                >
+                  <feFlood flood-opacity="0" result="BackgroundImageFix" />
+                  <feBlend
+                    mode="normal"
+                    in="SourceGraphic"
+                    in2="BackgroundImageFix"
+                    result="shape"
+                  />
+                  <feGaussianBlur
+                    stdDeviation="5"
+                    result="effect1_foregroundBlur_31066_13663"
+                  />
+                </filter>
+                <linearGradient
+                  id="paint0_linear_31066_13663"
+                  x1="20.9998"
+                  y1="2.00008"
+                  x2="67.3274"
+                  y2="138.119"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stop-color="#FBFBFB" />
+                  <stop offset="0.374839" stop-color="#D98D93" />
+                  <stop offset="0.592469" stop-color="#9262EA" />
+                  <stop offset="0.78" stop-color="#4633C3" />
+                  <stop offset="1" stop-color="#162A4B" />
+                </linearGradient>
+                <linearGradient
+                  id="paint1_linear_31066_13663"
+                  x1="19.9994"
+                  y1="6.00023"
+                  x2="65.8615"
+                  y2="122.495"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stop-color="#FBFBFB" />
+                  <stop offset="0.25" stop-color="#D98D93" />
+                  <stop offset="0.468842" stop-color="#9262EA" />
+                  <stop offset="0.78" stop-color="#4633C3" />
+                  <stop offset="0.975" stop-color="#162A4B" />
+                </linearGradient>
+                <linearGradient
+                  id="paint2_linear_31066_13663"
+                  x1="65.8621"
+                  y1="20"
+                  x2="65.8621"
+                  y2="122.495"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stop-color="#FBFBFB" />
+                  <stop offset="0.25" stop-color="#D98D93" />
+                  <stop offset="0.625" stop-color="#9262EA" />
+                  <stop offset="0.78" stop-color="#4633C3" />
+                  <stop offset="0.975" stop-color="#162A4B" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </button>
+          <Text typography="body2" style={{ color: "#fff", marginLeft: "5px" }}>
+            신고하기
+          </Text>
+        </VStack>
 
-          <IconButton
-            variant="ghost" // 투명 + hover 효과
-            size="xl"
-            onClick={startFollow} // 50x50px 근접
-            style={{
-              borderRadius: "50%",
-              backdropFilter: "blur(8px)",
-              background: "rgba(255,255,255,0.2)",
-              border: "0.5px solid rgba(255,255,255,0.5)",
-              color: "#fff",
-              //marginTop: "9px",
-              zIndex: 6,
-            }}
-            aria-label="위치"
-          >
-            <Icon name="location" width={24} height={24} />
-          </IconButton>
-        </HStack>
+        <IconButton
+          variant="ghost" // 투명 + hover 효과
+          size="xl"
+          onClick={startFollow} // 50x50px 근접
+          style={{
+            borderRadius: "50%",
+            backdropFilter: "blur(8px)",
+            background: "rgba(255,255,255,0.2)",
+            border: "0.5px solid rgba(255,255,255,0.5)",
+            color: "#fff",
+            //marginTop: "9px",
+            zIndex: 6,
+          }}
+          aria-label="위치"
+        >
+          <Icon name="location" width={24} height={24} />
+        </IconButton>
       </div>
       <ReportModal isOpen={isOpen} onClose={close} onReport={handleReport} />
     </div>
