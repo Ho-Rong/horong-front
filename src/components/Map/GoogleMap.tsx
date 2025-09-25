@@ -10,12 +10,16 @@ import {
 } from "@googlemaps/markerclusterer";
 import { Icon } from "../Icon/Icon";
 import { renderToStaticMarkup } from "react-dom/server";
-
+import { getClusterSizeByCount } from "@/utils/cluster-size";
+import { createCssGlowCluster } from "./css-glow-cluster";
+import { HStack, IconButton, VStack } from "@vapor-ui/core";
+import { HomeIcon } from "@vapor-ui/icons";
+import { Text } from "@vapor-ui/core";
 type Place = { lat: number; lng: number; name: string };
 
-export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
-  console.log("mapId", mapId);
+const SLIGHT_ZOOM_IN = 0.4;
 
+export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -24,6 +28,9 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     null
   );
   const initializedRef = useRef(false);
+
+  const watchIdRef = useRef<number | null>(null);
+  const firstFixRef = useRef(true);
 
   const [ready, setReady] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -48,37 +55,6 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     return pts;
   }
 
-  // ---- 클러스터 원 생성 (숫자 없음, 그라데이션) ----
-  function createClusterCircle(count: number, zoom = 10) {
-    const base = mapSqrt(count, 1, 200, 36, 220); // √스케일
-    const zoomFactor = 1 - Math.max(0, zoom - 12) * 0.06;
-    const px = Math.round(
-      Math.max(28, Math.min(260, base * Math.max(0.7, zoomFactor)))
-    );
-
-    const el = document.createElement("div");
-    el.style.width = `${px}px`;
-    el.style.height = `${px}px`;
-    el.style.borderRadius = "50%";
-    el.style.transform = "translate(-50%, -50%)";
-    el.style.border = "0.5px solid var(--color-lemon-050, #FEFBA8)";
-    el.style.background =
-      "var(--light-maker-large, radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(254, 251, 168, 0.70) 0%, rgba(255, 249, 98, 0.10) 19.23%, rgba(255, 248, 75, 0.20) 39.9%, rgba(255, 249, 93, 0.40) 65.87%, var(--color-lemon-050, #FEFBA8) 100%))";
-    el.style.boxShadow = "0 0 40px rgba(255, 247, 133, 0.35)";
-    return el;
-  }
-  function mapSqrt(
-    v: number,
-    inMin: number,
-    inMax: number,
-    outMin: number,
-    outMax: number
-  ) {
-    const t =
-      (Math.sqrt(v) - Math.sqrt(inMin)) / (Math.sqrt(inMax) - Math.sqrt(inMin));
-    return outMin + Math.max(0, Math.min(1, t)) * (outMax - outMin);
-  }
-
   // ---- 캔버스 준비 ----
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -90,7 +66,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     return () => ro.disconnect();
   }, []);
 
-  // ---- 지도 초기화 + 클러스터러 ----
+  // ---- 지도 초기화 + Lottie 클러스터러 ----
   useEffect(() => {
     if (!ready || initializedRef.current || !canvasRef.current) return;
     initializedRef.current = true;
@@ -106,7 +82,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       const map = new Map(canvasRef.current!, {
         center: { lat: 33.38, lng: 126.55 },
         zoom: 18,
-        mapId: mapId,
+        mapId,
         colorScheme: google.maps.ColorScheme.LIGHT,
         disableDefaultUI: true,
         gestureHandling: "greedy",
@@ -119,10 +95,12 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       const bounds = new google.maps.LatLngBounds(sw, ne);
       map.fitBounds(bounds);
 
-      const desiredZoom = 9;
+      // ✅ fitBounds 이후, idle 시점에 '살짝 확대'
       google.maps.event.addListenerOnce(map, "idle", () => {
-        const z = map.getZoom() ?? desiredZoom;
-        if (z < desiredZoom) map.setZoom(desiredZoom);
+        const current = map.getZoom() ?? 9;
+        // 클러스터 해제 임계치(10) 바로 아래로 유지
+        const target = Math.min(10 - 0.2, current + SLIGHT_ZOOM_IN);
+        map.setZoom(target);
       });
 
       // ✅ 개별 마커는 'map'에 직접 붙이지 말고 clusterer에만 넘긴다!
@@ -139,41 +117,70 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           content: container.firstChild as HTMLElement,
         });
       });
-      // 원하는 임계값 (원하는대로 조절 가능)
-      const CLUSTER_MAX_ZOOM = 10; // ← 이 줌을 넘어가면 개별 마커가 풀려서 보임
-      const CLUSTER_RADIUS_PX = 130; // 클러스터링 반경(픽셀). 숫자 키우면 더 뭉침
 
-      // 커스텀 렌더러 그대로 사용 (count 원 그리기)
-      const renderer: Renderer = {
-        render: ({ count, position }: Cluster) => {
-          const zoom = map.getZoom() ?? 10;
-          const circle = createClusterCircle(count, zoom);
-          const am = new google.maps.marker.AdvancedMarkerElement({
+      const CLUSTER_MAX_ZOOM = 10; // 이 줌을 넘으면 개별 마커로 풀림
+      const CLUSTER_RADIUS_PX = 130;
+
+      const renderer: google.maps.marker.Renderer = {
+        render: ({
+          count,
+          position,
+        }: {
+          count: number;
+          position: google.maps.LatLngLiteral;
+        }) => {
+          const sizeKey = getClusterSizeByCount(count);
+          const latQ = Math.round(position.lat * 1e4);
+          const lngQ = Math.round(position.lng * 1e4);
+          const seed =
+            (latQ * 73856093) ^ (lngQ * 19349663) ^ (count * 83492791);
+
+          // 밝은 지도면 blend:"normal"로 바꿔도 됨
+          const content = createCssGlowCluster(sizeKey, {
+            seed,
+            blend: "screen",
+          });
+
+          return new google.maps.marker.AdvancedMarkerElement({
             position,
-            content: circle,
+            content,
             zIndex: 1000 + Math.min(count, 999),
           });
-          circle.onclick = () => {
-            map.panTo(position);
-            map.setZoom(Math.min((map.getZoom() ?? 10) + 2, 21));
-          };
-          return am;
         },
       };
 
-      // ✅ ‘minPoints: 1’이라 초기엔 단일 포인트도 전부 “클러스터 원”으로만 보임
       clustererRef.current = new MarkerClusterer({
         map,
         markers: baseMarkers,
         renderer,
         algorithm: new SuperClusterAlgorithm({
-          minPoints: 1, // 단일 포인트도 클러스터 처리
-          maxZoom: CLUSTER_MAX_ZOOM, // 이 줌 이후엔 개별 마커로 풀림
+          minPoints: 1,
+          maxZoom: CLUSTER_MAX_ZOOM,
           radius: CLUSTER_RADIUS_PX,
         }),
       });
     })();
-  }, [ready]);
+
+    // (선택) 언마운트/리셋 시 정리
+    return () => {
+      try {
+        if (clustererRef.current) {
+          clustererRef.current.clearMarkers();
+          clustererRef.current = null;
+        }
+        if (myMarkerRef.current) {
+          (myMarkerRef.current as any).map = null;
+          myMarkerRef.current = null;
+        }
+
+        if (watchIdRef.current != null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
+        mapRef.current = null;
+      } catch {}
+    };
+  }, [ready, mapId]);
 
   // ---- 현재 위치 따라가기 + 주변 포인트는 clusterer에 추가 ----
   const startFollow = async () => {
@@ -194,28 +201,40 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       return dot;
     };
 
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => {
-          const here = { lat: p.coords.latitude, lng: p.coords.longitude };
+    // 이전 구독이 있으면 정리(재시작 대비)
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    firstFixRef.current = true; // 새 추적 시작 시 초기화
 
-          // 현재 위치 마커는 map에 직접 붙여도 OK (사용자 위치용이니 클러스터 제외)
-          if (!myMarkerRef.current) {
-            myMarkerRef.current = new AdvancedMarkerElement({
-              map: mapRef.current!,
-              position: here,
-              title: "현재 위치",
-              content: makeDot(),
-            });
-          } else {
-            myMarkerRef.current.position = here;
-          }
+    if (!("geolocation" in navigator)) {
+      console.warn("Geolocation을 지원하지 않는 브라우저입니다.");
+      return;
+    }
 
-          mapRef.current!.moveCamera({ center: here, zoom: 19, tilt: 10 });
-          mapRef.current!.setTilt(67.5);
-          mapRef.current!.setHeading(45);
+    const onPos: PositionCallback = (p) => {
+      const here = { lat: p.coords.latitude, lng: p.coords.longitude };
 
-          // 주변 포인트는 clusterer에만 추가!
+      // 현재 위치 마커 upsert
+      if (!myMarkerRef.current) {
+        myMarkerRef.current = new AdvancedMarkerElement({
+          map: mapRef.current!,
+          position: here,
+          title: "현재 위치",
+          content: makeDot(),
+        });
+      } else {
+        myMarkerRef.current.position = here;
+      }
+
+      // 지도 이동: 첫 fix 때는 연출(zoom/tilt/heading), 이후에는 center만
+      if (firstFixRef.current) {
+        mapRef.current!.moveCamera({ center: here, zoom: 19, tilt: 67.5 });
+        mapRef.current!.setHeading(45);
+
+        // 주변 포인트는 첫 fix 시 1회만 추가
+        if (nearbyPlaces.length > 0) {
           const nearMock: Place[] = nearbyPlaces.map((n, i) => ({
             ...n,
             lat: here.lat + (Math.random() - 0.5) * 0.01,
@@ -230,13 +249,26 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
               })
           );
           clustererRef.current?.addMarkers(newMarkers);
+        }
 
-          setIsFollowing(true);
-        },
-        (err) => console.warn("현재 위치 가져오기 실패:", err),
-        { enableHighAccuracy: true }
-      );
-    }
+        firstFixRef.current = false;
+      } else {
+        // 빠르고 잦은 갱신에 유리: 줌/틸트 유지 + 센터만 이동
+        mapRef.current!.moveCamera({ center: here });
+      }
+
+      setIsFollowing(true);
+    };
+
+    const onErr: PositionErrorCallback = (err) => {
+      console.warn("현재 위치 추적 실패:", err);
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(onPos, onErr, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10_000,
+    });
   };
 
   return (
@@ -249,93 +281,215 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         style={{ width: "100%", height: "100%", overflow: "hidden" }}
       />
 
-      {/* 우측 상단 버튼 */}
-      <button
+      <div
+        style={{
+          position: "absolute",
+          inset: "0 0 auto 0", // top:0, left/right:0
+          height: "20%", // 필요시 24~36%로 조절
+          pointerEvents: "none",
+          zIndex: 5,
+          background:
+            "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.00) 100%)",
+        }}
+        aria-hidden
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: "auto 0 0 0", // bottom:0, left/right:0
+          height: "20%", // 필요시 24~36%로 조절
+          pointerEvents: "none",
+          zIndex: 5,
+          // safe-area 살짝 고려 (보이지 않는 여백이 필요하면 아래처럼 padding을 줄 수도 있어)
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          background:
+            "linear-gradient(0deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.00) 100%)",
+        }}
+        aria-hidden
+      />
+
+      <IconButton
+        variant="ghost" // 투명 + hover 효과
+        size="xl"
         onClick={() => console.log("농장으로 가기")}
         style={{
           position: "absolute",
-          right: 15,
-          top: 25,
-          padding: "10px 12px",
-          width: 56,
-          height: 56,
+          right: 19,
+          top: 29,
           borderRadius: "50%",
-          border: "none",
-          color: "#111827",
-          background: "#fff",
-          cursor: "pointer",
-          zIndex: 9999,
+          backdropFilter: "blur(8px)",
+          background: "rgba(255,255,255,0.2)",
+          border: "0.5px solid rgba(255,255,255,0.5)",
+          color: "#fff",
+          zIndex: 6,
+          //marginTop: "9px",
         }}
+        aria-label="필터"
       >
-        옵션
-      </button>
+        <HomeIcon />
+      </IconButton>
 
       {/* 하단 컨트롤 바 */}
       <div
         style={{
           position: "absolute",
-          left: 12,
-          right: 12,
-          bottom: "max(50px, env(safe-area-inset-bottom, 0px) + 12px)",
+          left: 44,
+          width: "100%",
+
+          bottom: "max(60px, env(safe-area-inset-bottom, 0px) + 12px)",
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          zIndex: 9999,
-          pointerEvents: "none",
+          pointerEvents: "auto",
         }}
       >
         <div style={{ pointerEvents: "auto" }}>
           <SpeedDial
             actions={[
               {
-                id: "filter",
-                label: "필터",
-                onClick: () => console.log("필터"),
+                id: "star",
+                label: "가로등",
+                onClick: () => console.log("star"),
               },
+              { id: "cctv", label: "CCTV", onClick: () => console.log("cctv") },
               {
-                id: "layers",
-                label: "레이어",
-                onClick: () => console.log("레이어"),
-              },
-              {
-                id: "nearby",
-                label: "주변",
-                onClick: () => console.log("주변"),
+                id: "notice",
+                label: "신고",
+                onClick: () => console.log("notice"),
               },
             ]}
           />
         </div>
 
-        <button
-          onClick={() => console.log("신고하기 모달")}
-          style={{
-            pointerEvents: "auto",
-            padding: "10px 12px",
-            width: 80,
-            height: 80,
-            borderRadius: "50%",
-            border: "none",
-            color: "#111827",
-            background: "#fff",
-            cursor: "pointer",
-            marginLeft: 135,
-          }}
-        >
-          신고
-        </button>
+        <HStack gap={"$600"} alignItems={"center"}>
+          <VStack marginLeft="100px" textAlign={"center"} gap={"$050"}>
+            <button
+              onClick={() => console.log("신고하기 모달")}
+              style={{
+                width: 90, // IconButton 크기랑 통일
+                height: 90,
+                cursor: "pointer",
+                zIndex: 6,
+              }}
+            >
+              <svg
+                width="100"
+                height="100"
+                viewBox="0 0 120 120"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <g opacity="0.6" filter="url(#filter0_f_31066_13663)">
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="50"
+                    fill="url(#paint0_linear_31066_13663)"
+                  />
+                </g>
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="39.5"
+                  fill="url(#paint1_linear_31066_13663)"
+                  stroke="url(#paint2_linear_31066_13663)"
+                />
+                <path
+                  d="M52.6573 64.1633H50.6982C49.6206 64.1633 48.6982 63.7796 47.9308 63.0122C47.1635 62.2449 46.7798 61.3224 46.7798 60.2449V56.3265C46.7798 55.249 47.1635 54.3265 47.9308 53.5592C48.6982 52.7918 49.6206 52.4082 50.6982 52.4082H58.5349L65.3431 48.2939C65.9961 47.902 66.6573 47.902 67.3267 48.2939C67.9961 48.6857 68.3308 49.2571 68.3308 50.0082V66.5633C68.3308 67.3143 67.9961 67.8857 67.3267 68.2776C66.6573 68.6694 65.9961 68.6694 65.3431 68.2776L58.5349 64.1633H56.5757V70.0408C56.5757 70.5959 56.3879 71.0612 56.0124 71.4367C55.6369 71.8122 55.1716 72 54.6165 72C54.0614 72 53.5961 71.8122 53.2206 71.4367C52.8451 71.0612 52.6573 70.5959 52.6573 70.0408V64.1633ZM70.29 64.849V51.7224C71.1716 52.5061 71.8818 53.4612 72.4206 54.5878C72.9594 55.7143 73.2288 56.9469 73.2288 58.2857C73.2288 59.6245 72.9594 60.8571 72.4206 61.9837C71.8818 63.1102 71.1716 64.0653 70.29 64.849Z"
+                  fill="white"
+                />
+                <defs>
+                  <filter
+                    id="filter0_f_31066_13663"
+                    x="0"
+                    y="0"
+                    width="120"
+                    height="120"
+                    filterUnits="userSpaceOnUse"
+                    color-interpolation-filters="sRGB"
+                  >
+                    <feFlood flood-opacity="0" result="BackgroundImageFix" />
+                    <feBlend
+                      mode="normal"
+                      in="SourceGraphic"
+                      in2="BackgroundImageFix"
+                      result="shape"
+                    />
+                    <feGaussianBlur
+                      stdDeviation="5"
+                      result="effect1_foregroundBlur_31066_13663"
+                    />
+                  </filter>
+                  <linearGradient
+                    id="paint0_linear_31066_13663"
+                    x1="20.9998"
+                    y1="2.00008"
+                    x2="67.3274"
+                    y2="138.119"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop stop-color="#FBFBFB" />
+                    <stop offset="0.374839" stop-color="#D98D93" />
+                    <stop offset="0.592469" stop-color="#9262EA" />
+                    <stop offset="0.78" stop-color="#4633C3" />
+                    <stop offset="1" stop-color="#162A4B" />
+                  </linearGradient>
+                  <linearGradient
+                    id="paint1_linear_31066_13663"
+                    x1="19.9994"
+                    y1="6.00023"
+                    x2="65.8615"
+                    y2="122.495"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop stop-color="#FBFBFB" />
+                    <stop offset="0.25" stop-color="#D98D93" />
+                    <stop offset="0.468842" stop-color="#9262EA" />
+                    <stop offset="0.78" stop-color="#4633C3" />
+                    <stop offset="0.975" stop-color="#162A4B" />
+                  </linearGradient>
+                  <linearGradient
+                    id="paint2_linear_31066_13663"
+                    x1="65.8621"
+                    y1="20"
+                    x2="65.8621"
+                    y2="122.495"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop stop-color="#FBFBFB" />
+                    <stop offset="0.25" stop-color="#D98D93" />
+                    <stop offset="0.625" stop-color="#9262EA" />
+                    <stop offset="0.78" stop-color="#4633C3" />
+                    <stop offset="0.975" stop-color="#162A4B" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </button>
+            <Text
+              typography="body2"
+              style={{ color: "#fff", marginLeft: "5px" }}
+            >
+              신고하기
+            </Text>
+          </VStack>
 
-        <button
-          onClick={startFollow}
-          style={{
-            pointerEvents: "auto",
-            width: 56,
-            height: 56,
-            borderRadius: "50%",
-            background: "#fff",
-            cursor: "pointer",
-            marginLeft: 70,
-          }}
-        />
+          <IconButton
+            variant="ghost" // 투명 + hover 효과
+            size="xl"
+            onClick={startFollow} // 50x50px 근접
+            style={{
+              borderRadius: "50%",
+              backdropFilter: "blur(8px)",
+              background: "rgba(255,255,255,0.2)",
+              border: "0.5px solid rgba(255,255,255,0.5)",
+              color: "#fff",
+              //marginTop: "9px",
+              zIndex: 6,
+            }}
+            aria-label="위치"
+          >
+            <Icon name="location" width={24} height={24} />
+          </IconButton>
+        </HStack>
       </div>
     </div>
   );
