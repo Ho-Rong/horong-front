@@ -1,7 +1,8 @@
 "use client";
-import { ReportModal } from "../../../components/Modals/ReportModal";
+
 import { useModal } from "@/hooks/useModal";
 import { Button } from "@vapor-ui/core";
+import {ReportModal} from "@/components/modals/ReportModal";
 
 interface ReportData {
   description: string;
