@@ -10,13 +10,6 @@ spec:
   - host: horong.goorm.training
     http:
       paths:
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: java-backend
-            port:
-              number: 80
       - path: /
         pathType: Prefix
         backend:
