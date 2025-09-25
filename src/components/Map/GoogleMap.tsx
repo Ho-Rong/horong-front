@@ -11,7 +11,7 @@ import Lottie from "lottie-react";
 import farmAnim from "@/lotties/farm.json";
 import { useModal } from "@/hooks/useModal";
 import { useReportsLayer } from "@/hooks/useReportsLayer";
-import { ReportModal } from "../modals/ReportModal";
+import { ReportModal } from "../Modals/ReportModal";
 
 const SLIGHT_ZOOM_IN = 0.4;
 const FOLLOW_ZOOM = 19;
@@ -38,11 +38,240 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
 
   const [ready, setReady] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    address: string;
+  } | null>(null);
+
+  // 구글 API로 주소 가져오기
+  const getAddressFromGoogle = async (
+    lat: number,
+    lng: number
+  ): Promise<string> => {
+    const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    console.log("🌍 [GOOGLE API] 주소 변환 시작");
+    console.log("  - API 키 존재 여부:", !!API_KEY);
+    console.log(
+      "  - API 키 앞 10자리:",
+      API_KEY ? API_KEY.substring(0, 10) + "..." : "undefined"
+    );
+    console.log("  - 요청 좌표:", { lat, lng });
+
+    if (!API_KEY) {
+      console.warn("⚠️ [WARNING] Google Maps API 키가 설정되지 않았습니다");
+      return `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+    }
+
+    try {
+      const requestUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${API_KEY}&language=ko`;
+      console.log(
+        "🌍 [GOOGLE API] 요청 URL:",
+        requestUrl.replace(API_KEY, "API_KEY")
+      );
+
+      const response = await fetch(requestUrl);
+
+      console.log("🌍 [GOOGLE API] 응답 상태:", response.status);
+      console.log("🌍 [GOOGLE API] 응답 OK:", response.ok);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("🌍 [GOOGLE API] 응답 데이터:", data);
+
+      if (data.status === "OK" && data.results.length > 0) {
+        const result = data.results[0];
+        console.log("🌍 [GOOGLE API] 첫 번째 결과:", result);
+
+        // 주소 구성 요소 파싱해서 간단한 주소 만들기
+        const components = result.address_components;
+        console.log("🌍 [GOOGLE API] 주소 구성요소들:", components);
+
+        let city = "";
+        let district = "";
+
+        components.forEach((component: any, index: number) => {
+          console.log(`🌍 [GOOGLE API] 구성요소 ${index}:`, component);
+          const types = component.types;
+          if (types.includes("administrative_area_level_1")) {
+            city = component.long_name; // 시/도
+            console.log("🌍 [GOOGLE API] 시/도 발견:", city);
+          }
+          if (
+            types.includes("administrative_area_level_2") ||
+            types.includes("sublocality_level_1")
+          ) {
+            district = component.long_name; // 구/군
+            console.log("🌍 [GOOGLE API] 구/군 발견:", district);
+          }
+        });
+
+        // 간단한 주소 형식으로 반환
+        let finalAddress;
+        if (city && district) {
+          finalAddress = `${city} ${district}`;
+        } else {
+          // 전체 주소에서 첫 번째 부분만 가져오기
+          finalAddress =
+            result.formatted_address.split(",")[0] || result.formatted_address;
+        }
+
+        console.log("🎯 [SUCCESS] 최종 주소:", finalAddress);
+        return finalAddress;
+      } else {
+        console.warn(`⚠️ [WARNING] Geocoding failed: ${data.status}`);
+        console.log("🌍 [GOOGLE API] 실패 상세:", data);
+        return `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+      }
+    } catch (error) {
+      console.error("❌ [ERROR] 구글 지오코딩 실패:", error);
+      return `위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+    }
+  };
+
+  // 현재 위치와 주소를 함께 가져오는 함수
+  const getCurrentLocationWithAddress = (): Promise<{
+    latitude: number;
+    longitude: number;
+    address: string;
+  }> => {
+    return new Promise((resolve, reject) => {
+      console.log("📍 [GPS] 위치 요청 시작");
+
+      if (!navigator.geolocation) {
+        console.error("❌ [ERROR] 브라우저가 위치 서비스를 지원하지 않음");
+        reject(new Error("이 브라우저는 위치 서비스를 지원하지 않습니다."));
+        return;
+      }
+
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 300000, // 5분간 캐시
+      };
+
+      console.log("📍 [GPS] 위치 옵션:", options);
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+
+          console.log("🎯 [SUCCESS] GPS 위치 획득 성공!");
+          console.log("  - 위도:", latitude);
+          console.log("  - 경도:", longitude);
+          console.log("  - 정확도:", accuracy, "m");
+          console.log("  - 전체 좌표 객체:", position.coords);
+
+          try {
+            console.log("🌍 [GOOGLE API] 주소 변환 시작...");
+            // 구글 API로 주소 가져오기
+            const address = await getAddressFromGoogle(latitude, longitude);
+
+            console.log("🎯 [SUCCESS] 주소 변환 완료:", address);
+
+            const result = {
+              latitude,
+              longitude,
+              address,
+            };
+
+            console.log("🎯 [FINAL] 최종 반환 객체:", result);
+            resolve(result);
+          } catch (addressError) {
+            console.warn(
+              "⚠️ [WARNING] 주소 가져오기 실패, 좌표만 제공:",
+              addressError
+            );
+
+            // 주소 가져오기 실패해도 좌표는 제공
+            const fallbackResult = {
+              latitude,
+              longitude,
+              address: `위도: ${latitude.toFixed(4)}, 경도: ${longitude.toFixed(
+                4
+              )}`,
+            };
+
+            console.log("🔄 [FALLBACK] 좌표만 반환:", fallbackResult);
+            resolve(fallbackResult);
+          }
+        },
+        (error) => {
+          console.error("❌ [ERROR] GPS 위치 획득 실패");
+          console.error("  - 에러 코드:", error.code);
+          console.error("  - 에러 메시지:", error.message);
+
+          let errorMessage = "";
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = "위치 접근이 거부되었습니다.";
+              console.error("❌ [ERROR] 사용자가 위치 권한을 거부함");
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = "위치 정보를 사용할 수 없습니다.";
+              console.error("❌ [ERROR] 위치 정보 사용 불가");
+              break;
+            case error.TIMEOUT:
+              errorMessage = "위치 정보 요청이 시간 초과되었습니다.";
+              console.error("❌ [ERROR] 위치 요청 타임아웃");
+              break;
+            default:
+              errorMessage = "위치 정보를 가져오는 중 오류가 발생했습니다.";
+              console.error("❌ [ERROR] 기타 위치 오류");
+              break;
+          }
+          reject(new Error(errorMessage));
+        },
+        options
+      );
+    });
+  };
+
+  // 모달이 열릴 때 현재 위치 가져오기
+  const handleModalOpen = async () => {
+    console.log("🚀 [DEBUG] 신고하기 버튼 클릭됨");
+    console.log("🚀 [DEBUG] 모달 열기 - 현재 위치 가져오는 중...");
+
+    try {
+      console.log("🚀 [DEBUG] getCurrentLocationWithAddress 호출 시작");
+      const locationInfo = await getCurrentLocationWithAddress();
+
+      console.log("🎯 [SUCCESS] 현재 위치 정보 획득 성공:");
+      console.log("  - 위도:", locationInfo.latitude);
+      console.log("  - 경도:", locationInfo.longitude);
+      console.log("  - 주소:", locationInfo.address);
+      console.log("  - 전체 객체:", locationInfo);
+
+      setCurrentLocation(locationInfo);
+      console.log("🚀 [DEBUG] currentLocation state 업데이트 완료");
+
+      open(); // 위치 정보 설정 후 모달 열기
+      console.log("🚀 [DEBUG] 모달 열기 완료");
+    } catch (error) {
+      console.error("❌ [ERROR] 위치 정보 가져오기 실패:", error);
+      console.error("❌ [ERROR] 에러 메시지:");
+
+      // 위치 정보 실패해도 모달은 열기 (기본값 사용)
+      const fallbackLocation = {
+        latitude: 33.2541,
+        longitude: 126.5597,
+        address: "제주 서귀포시 (기본값)",
+      };
+
+      console.log("🔄 [FALLBACK] 기본 위치 사용:", fallbackLocation);
+      setCurrentLocation(fallbackLocation);
+
+      open();
+      alert("위치 정보를 가져올 수 없어 기본 위치를 사용합니다.");
+    }
+  };
 
   const handleReport = (data: ReportData) => {
-    // 여기서 실제 API 호출
-    // await reportAPI.submit(data);
-
+    console.log("신고 데이터:", data);
     alert("신고가 접수되었습니다.");
   };
 
@@ -83,7 +312,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         disableDefaultUI: true,
         gestureHandling: "greedy",
       });
-      setMap(map); // ✅ 훅에 전달될 state 업데이트
+      setMap(map);
 
       // 제주 경계 맞추기
       const sw = new google.maps.LatLng(33.05, 126.14);
@@ -114,14 +343,12 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     };
   }, [ready, mapId]);
 
-  // ✅ 가로등 레이어 훅: 줌 20 이상이면 개별 마커, 그 외엔 클러스터
   const lights = useLightsLayer(map, {
     initialEnabled: true,
     cooldownMs: 700,
   });
 
-  // 현재 위치 따라가기
-  // 현재 위치 따라가기
+  // 현재 위치 따라가기 (기존 startFollow 함수도 구글 API 사용하도록 업데이트)
   const startFollow = async () => {
     if (!map) return;
     const { AdvancedMarkerElement } = (await google.maps.importLibrary(
@@ -135,7 +362,6 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
     const makeIcon = () => {
       const el = document.createElement("div");
       el.innerHTML = svgHtml;
-      // innerHTML은 루트가 <svg>라서 childNodes[0]에 svg가 들어감
       return el.firstChild as HTMLElement;
     };
 
@@ -150,15 +376,29 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       return;
     }
 
-    const onPos: PositionCallback = (p) => {
+    const onPos: PositionCallback = async (p) => {
       const here = { lat: p.coords.latitude, lng: p.coords.longitude };
+
+      // 구글 API로 주소 가져오기
+      const address = await getAddressFromGoogle(
+        p.coords.latitude,
+        p.coords.longitude
+      );
+
+      // 현재 위치 state 업데이트 (실시간으로)
+      setCurrentLocation({
+        latitude: p.coords.latitude,
+        longitude: p.coords.longitude,
+        address,
+      });
+
       if (!myMarkerRef.current) {
         myMarkerRef.current = new AdvancedMarkerElement({
           map,
           position: here,
           title: "현재 위치",
           content: makeIcon(),
-          zIndex: 3000, // 다른 마커보다 위에 보이도록
+          zIndex: 3000,
         });
       } else {
         myMarkerRef.current.position = here;
@@ -191,11 +431,12 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         style={{ width: "100%", height: "100%", overflow: "hidden" }}
       />
 
+      {/* 그라디언트 오버레이들 */}
       <div
         style={{
           position: "absolute",
-          inset: "0 0 auto 0", // top:0, left/right:0
-          height: "20%", // 필요시 24~36%로 조절
+          inset: "0 0 auto 0",
+          height: "20%",
           pointerEvents: "none",
           zIndex: 5,
           background:
@@ -206,11 +447,10 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
       <div
         style={{
           position: "absolute",
-          inset: "auto 0 0 0", // bottom:0, left/right:0
-          height: "20%", // 필요시 24~36%로 조절
+          inset: "auto 0 0 0",
+          height: "20%",
           pointerEvents: "none",
           zIndex: 5,
-          // safe-area 살짝 고려 (보이지 않는 여백이 필요하면 아래처럼 padding을 줄 수도 있어)
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           background:
             "linear-gradient(0deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.00) 100%)",
@@ -218,6 +458,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
         aria-hidden
       />
 
+      {/* 농장 버튼 */}
       <IconButton
         variant="ghost"
         size="xl"
@@ -239,7 +480,7 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           animationData={farmAnim}
           loop
           autoplay
-          style={{ width: 32, height: 32, pointerEvents: "none" }} // 버튼 클릭 방해 X
+          style={{ width: 32, height: 32, pointerEvents: "none" }}
         />
       </IconButton>
 
@@ -249,7 +490,6 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           position: "absolute",
           left: 44,
           width: "100%",
-
           bottom: "max(60px, env(safe-area-inset-bottom, 0px) + 12px)",
           display: "flex",
           alignItems: "center",
@@ -292,15 +532,17 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
 
         <HStack gap={"$600"} alignItems={"center"}>
           <VStack marginLeft="100px" textAlign={"center"} gap={"$050"}>
+            {/* 수정된 신고하기 버튼 - handleModalOpen 호출 */}
             <button
-              onClick={open}
+              onClick={handleModalOpen} // 변경됨!
               style={{
-                width: 90, // IconButton 크기랑 통일
+                width: 90,
                 height: 90,
                 cursor: "pointer",
                 zIndex: 6,
               }}
             >
+              {/* SVG 아이콘 (기존과 동일) */}
               <svg
                 width="100"
                 height="100"
@@ -403,16 +645,15 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           </VStack>
 
           <IconButton
-            variant="ghost" // 투명 + hover 효과
+            variant="ghost"
             size="xl"
-            onClick={startFollow} // 50x50px 근접
+            onClick={startFollow}
             style={{
               borderRadius: "50%",
               backdropFilter: "blur(8px)",
               background: "rgba(255,255,255,0.2)",
               border: "0.5px solid rgba(255,255,255,0.5)",
               color: "#fff",
-              //marginTop: "9px",
               zIndex: 6,
             }}
             aria-label="위치"
@@ -421,7 +662,14 @@ export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
           </IconButton>
         </HStack>
       </div>
-      <ReportModal isOpen={isOpen} onClose={close} onReport={handleReport} />
+
+      {/* ReportModal - 구글 API로 가져온 현재 위치 전달 */}
+      <ReportModal
+        isOpen={isOpen}
+        onClose={close}
+        onReport={handleReport}
+        currentLocation={currentLocation} // 구글 API로 가져온 위치 전달
+      />
     </div>
   );
 }
