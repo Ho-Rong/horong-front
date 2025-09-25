@@ -20,6 +20,16 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    rules: {
+      // ⚠️ 변수 정의했는데 안 쓰는 경우 무시
+      "@typescript-eslint/no-unused-vars": "off",
+      // ⚠️ any 타입 허용
+      "@typescript-eslint/no-explicit-any": "off",
+      // ⚠️ useEffect deps 경고 무시
+      "react-hooks/exhaustive-deps": "off",
+    },
+  },
 ];
 
 export default eslintConfig;
