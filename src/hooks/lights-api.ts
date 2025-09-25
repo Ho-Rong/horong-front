@@ -1,9 +1,6 @@
 export const BASE_URL = "https://horong.goorm.training";
 
-export type ZoomLevel =
-  | "ZOOM_3"
-  | "ZOOM_4"
-  | "ZOOM_5"; // 가장 넓음  ← API 스펙에 맞춰 ZOOM_6 제거
+export type ZoomLevel = "ZOOM_2" | "ZOOM_3" | "ZOOM_4" | "ZOOM_5"; // 가장 넓음  ← API 스펙에 맞춰 ZOOM_6 제거
 
 // 서버 응답 스키마 반영 (count 포함)
 export interface LightPoint {
@@ -23,14 +20,17 @@ export interface GetLightsParams {
 
 /** 구글맵 zoom≈(3~21) → 서버 ZOOM_1~5 매핑 (API 스펙에 맞춤) */
 export function mapZoomToLevel(zoom: number): ZoomLevel {
-  if (zoom >= 20) return "ZOOM_3";
-  if (zoom >= 18) return "ZOOM_4";
+  if (zoom >= 20) return "ZOOM_2";
+  if (zoom >= 17) return "ZOOM_3";
+  if (zoom >= 13) return "ZOOM_4";
   return "ZOOM_5";
 }
 
 /** 줌 레벨 → gridSize(도 단위) 매핑 */
 export function gridSizeForLevel(level: ZoomLevel): number {
   switch (level) {
+    case "ZOOM_2":
+      return 999;
     case "ZOOM_3":
       return 999;
     case "ZOOM_4":
