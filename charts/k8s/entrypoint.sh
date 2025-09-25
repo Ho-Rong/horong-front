@@ -7,7 +7,5 @@ source /app/env/config.env \
 set +a
 
 
-printenv
-
 echo "Starting the application..."
 pnpm start
