@@ -28,6 +28,8 @@ export const overlay = style({
   alignItems: "center",
   justifyContent: "center",
   zIndex: 1001,
+  overflow: "hidden",
+
   // 더 부드러운 애니메이션
   animation: `${fadeIn} 0.4s ease-out forwards`,
 });

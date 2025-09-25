@@ -12,6 +12,8 @@ globalStyle("body", {
 
 export const container = style({
   position: "relative",
+  touchAction: "none",
+
   width: "100%",
   height: "100vh",
   overflow: "hidden",
@@ -61,8 +63,8 @@ export const Iconback = style({
   right: "20px",
   zIndex: 100,
   display: "flex",
-  width: "70px",
-  height: "70px",
+  width: "50px",
+  height: "50px",
   justifyContent: "center",
   alignItems: "center",
   gap: "var(--vapor-size-space-075)",

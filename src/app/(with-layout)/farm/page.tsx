@@ -407,7 +407,7 @@ export default function PhysicsBallsPage() {
   return (
     <div className={styles.container} ref={containerRef}>
       <button className={styles.Iconback} onClick={handleGoToHome}>
-        <HomeIcon style={{ width: "40px", height: "40px", fill: "#fff" }} />
+        <HomeIcon style={{ width: "30px", height: "30px", fill: "#fff" }} />
       </button>
 
       <div className={styles.ground} />
