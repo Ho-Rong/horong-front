@@ -1,36 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as styles from "./styles.css";
-import characterAnimation from "./characters/character-1.json";
 import Character from "./components/Character";
+import { Button } from "@vapor-ui/core";
+import { useRouter } from "next/navigation";
 
-interface PhysicsBallInstance {
-  element: HTMLElement;
-  index: number;
-  isDragging: boolean;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  gravity: number;
-  bounce: number;
-  friction: number;
-  radius: number;
-  mouseOffset: { x: number; y: number };
-  container: HTMLElement;
-
-  bindEvents(): void;
-  startDrag(e: MouseEvent | Touch): void;
-  drag(e: MouseEvent | Touch): void;
-  stopDrag(): void;
-  update(): void;
-  checkBounds(): void;
-  checkCollisions(): void;
-  updatePosition(): void;
+interface UserData {
+  name: string;
+  ownCharacters: number[];
 }
 
-class PhysicsBall implements PhysicsBallInstance {
+class PhysicsBall {
   element: HTMLElement;
   index: number;
   isDragging: boolean;
@@ -45,7 +26,6 @@ class PhysicsBall implements PhysicsBallInstance {
   mouseOffset: { x: number; y: number };
   balls: PhysicsBall[];
   container: HTMLElement;
-
   rotation: number;
   angularVelocity: number;
 
@@ -222,8 +202,8 @@ class PhysicsBall implements PhysicsBallInstance {
           Math.cos(perpAngle) * slideForce * (Math.random() - 0.5);
 
         const containerRect = this.container.getBoundingClientRect();
-        this.x = Math.max(0, Math.min(this.x, containerRect.width - 150)); // 120 → 80
-        this.y = Math.max(0, Math.min(this.y, containerRect.height - 150)); // 120 → 80
+        this.x = Math.max(0, Math.min(this.x, containerRect.width - 150));
+        this.y = Math.max(0, Math.min(this.y, containerRect.height - 150));
         otherBall.x = Math.max(
           0,
           Math.min(otherBall.x, containerRect.width - 150)
@@ -257,22 +237,119 @@ class PhysicsBall implements PhysicsBallInstance {
   updatePosition() {
     this.element.style.left = this.x + "px";
     this.element.style.top = this.y + "px";
-
     this.element.style.transform = `rotate(${this.rotation}deg)`;
   }
 }
 
+const fetchUserDataDirect = async (): Promise<UserData | null> => {
+  try {
+    const response = await fetch("https://horong.goorm.training/api/user", {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+      },
+      mode: "cors",
+      cache: "no-cache",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: UserData = await response.json();
+    return data;
+  } catch (error) {
+    console.error("직접 API 호출 실패:", error);
+    throw error;
+  }
+};
+
+const LoadingSpinner = () => (
+  <div
+    style={{
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      textAlign: "center",
+      zIndex: 1000,
+    }}
+  >
+    <div
+      style={{
+        width: "50px",
+        height: "50px",
+        border: "4px solid #f3f3f3",
+        borderTop: "4px solid #3498db",
+        borderRadius: "50%",
+        animation: "spin 1s linear infinite",
+        margin: "0 auto 20px auto",
+      }}
+    />
+    <div
+      style={{
+        fontSize: "18px",
+        fontWeight: "bold",
+        color: "#555",
+      }}
+    >
+      캐릭터 정보를 불러오는 중...
+    </div>
+    <style jsx>{`
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    `}</style>
+  </div>
+);
+
 export default function PhysicsBallsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-
   const animationRef = useRef<number | undefined>(undefined);
+  const hasInitialized = useRef(false);
+  const router = useRouter();
+
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const handleGoToHome = () => {
+    router.push("/home");
+  };
+
+  const handleFetchUserDataDirect = async () => {
+    setIsLoading(true);
+
+    try {
+      const data = await fetchUserDataDirect();
+      setUserData(data);
+    } catch (err) {
+      console.error("직접 호출 에러:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      handleFetchUserDataDirect();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || !userData) return;
 
     const ballElements = containerRef.current.querySelectorAll(
       "[data-ball]"
     ) as NodeListOf<HTMLElement>;
+
+    if (ballElements.length === 0) return;
+
     const balls: PhysicsBall[] = [];
 
     ballElements.forEach((element, index) => {
@@ -324,20 +401,26 @@ export default function PhysicsBallsPage() {
         element.removeEventListener("dblclick", handleDoubleClick);
       });
     };
-  }, []);
+  }, [userData]);
 
   return (
     <div className={styles.container} ref={containerRef}>
+      <Button onClick={handleGoToHome}>홈으로 가기</Button>
+
       <div className={styles.ground} />
 
-      <Character characterId={1} dataBall="0" characterIndex={0} />
-      <Character characterId={2} dataBall="1" characterIndex={1} />
-      <Character characterId={3} dataBall="2" characterIndex={2} />
-      <Character characterId={4} dataBall="3" characterIndex={3} />
-      <Character characterId={5} dataBall="4" characterIndex={4} />
-      <Character characterId={6} dataBall="5" characterIndex={5} />
-      <Character characterId={7} dataBall="6" characterIndex={6} />
-      <Character characterId={8} dataBall="7" characterIndex={7} />
+      {isLoading && <LoadingSpinner />}
+
+      {userData &&
+        !isLoading &&
+        userData.ownCharacters.map((characterId, index) => (
+          <Character
+            key={characterId}
+            characterId={characterId}
+            dataBall={index.toString()}
+            characterIndex={index}
+          />
+        ))}
     </div>
   );
 }
