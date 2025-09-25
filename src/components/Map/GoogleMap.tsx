@@ -2,39 +2,84 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SpeedDial } from "../SpeedDial/SpeedDial";
+import {
+  MarkerClusterer,
+  SuperClusterAlgorithm,
+  type Cluster,
+  type Renderer,
+} from "@googlemaps/markerclusterer";
+import { Icon } from "../Icon/Icon";
+import { renderToStaticMarkup } from "react-dom/server";
 
 type Place = { lat: number; lng: number; name: string };
 
-export default function GoogleMapJejuFollow() {
+export default function GoogleMapJejuFollow({ mapId }: { mapId: string }) {
+  console.log("mapId", mapId);
+
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const clustererRef = useRef<MarkerClusterer | null>(null);
   const myMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
     null
   );
-  const watchIdRef = useRef<number | null>(null);
   const initializedRef = useRef(false);
 
   const [ready, setReady] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
-  // 제주도 전체 목데이터
-  const mockPlaces: Place[] = [
-    { lat: 33.3617, lng: 126.5292, name: "한라산" },
-    { lat: 33.3062, lng: 126.3173, name: "중문 관광단지" },
-    { lat: 33.4996, lng: 126.5312, name: "제주시청" },
-    { lat: 33.2465, lng: 126.5658, name: "서귀포시청" },
-    { lat: 33.5563, lng: 126.7958, name: "성산일출봉" },
-    { lat: 33.239, lng: 126.5446, name: "천지연 폭포" },
-    { lat: 33.2522, lng: 126.4089, name: "용머리 해안" },
-  ];
+  // 🔸 제주도 내 랜덤 목데이터(초기 테스트용: 80개)
+  const mockPlaces: Place[] = randomJejuPoints(80);
 
-  // 현재 위치 기반 마커들
+  // 현재 위치 기반 테스트용
   const nearbyPlaces: Place[] = [
     { lat: 0, lng: 0, name: "주변 포인트1" },
     { lat: 0, lng: 0, name: "주변 포인트2" },
   ];
 
+  // ---- 유틸: 랜덤 제주 포인트 ----
+  function randomJejuPoints(count: number): Place[] {
+    const pts: Place[] = [];
+    for (let i = 0; i < count; i++) {
+      const lat = 33.1 + Math.random() * 0.5; // 대략 범위
+      const lng = 126.2 + Math.random() * 0.7;
+      pts.push({ lat, lng, name: `포인트 ${i + 1}` });
+    }
+    return pts;
+  }
+
+  // ---- 클러스터 원 생성 (숫자 없음, 그라데이션) ----
+  function createClusterCircle(count: number, zoom = 10) {
+    const base = mapSqrt(count, 1, 200, 36, 220); // √스케일
+    const zoomFactor = 1 - Math.max(0, zoom - 12) * 0.06;
+    const px = Math.round(
+      Math.max(28, Math.min(260, base * Math.max(0.7, zoomFactor)))
+    );
+
+    const el = document.createElement("div");
+    el.style.width = `${px}px`;
+    el.style.height = `${px}px`;
+    el.style.borderRadius = "50%";
+    el.style.transform = "translate(-50%, -50%)";
+    el.style.border = "0.5px solid var(--color-lemon-050, #FEFBA8)";
+    el.style.background =
+      "var(--light-maker-large, radial-gradient(70.49% 70.46% at 50.35% 50%, rgba(254, 251, 168, 0.70) 0%, rgba(255, 249, 98, 0.10) 19.23%, rgba(255, 248, 75, 0.20) 39.9%, rgba(255, 249, 93, 0.40) 65.87%, var(--color-lemon-050, #FEFBA8) 100%))";
+    el.style.boxShadow = "0 0 40px rgba(255, 247, 133, 0.35)";
+    return el;
+  }
+  function mapSqrt(
+    v: number,
+    inMin: number,
+    inMax: number,
+    outMin: number,
+    outMax: number
+  ) {
+    const t =
+      (Math.sqrt(v) - Math.sqrt(inMin)) / (Math.sqrt(inMax) - Math.sqrt(inMin));
+    return outMin + Math.max(0, Math.min(1, t)) * (outMax - outMin);
+  }
+
+  // ---- 캔버스 준비 ----
   useEffect(() => {
     if (!canvasRef.current) return;
     const ro = new ResizeObserver(([e]) => {
@@ -45,7 +90,7 @@ export default function GoogleMapJejuFollow() {
     return () => ro.disconnect();
   }, []);
 
-  // 지도 초기화 (제주도 전체 보기)
+  // ---- 지도 초기화 + 클러스터러 ----
   useEffect(() => {
     if (!ready || initializedRef.current || !canvasRef.current) return;
     initializedRef.current = true;
@@ -61,37 +106,76 @@ export default function GoogleMapJejuFollow() {
       const map = new Map(canvasRef.current!, {
         center: { lat: 33.38, lng: 126.55 },
         zoom: 18,
-        mapId: process.env.NEXT_PUBLIC_GOOGLE_MAP_ID,
+        mapId: mapId,
         colorScheme: google.maps.ColorScheme.LIGHT,
         disableDefaultUI: true,
         gestureHandling: "greedy",
       });
       mapRef.current = map;
 
-      // 제주도 대략 경계
+      // 제주 경계 맞추기
       const sw = new google.maps.LatLng(33.05, 126.14);
       const ne = new google.maps.LatLng(33.62, 126.98);
       const bounds = new google.maps.LatLngBounds(sw, ne);
       map.fitBounds(bounds);
 
-      const desiredZoom = 9; // 10~12 사이 취향대로
+      const desiredZoom = 9;
       google.maps.event.addListenerOnce(map, "idle", () => {
         const z = map.getZoom() ?? desiredZoom;
-        if (z < desiredZoom) map.setZoom(desiredZoom); // ← 작으면 키운다
+        if (z < desiredZoom) map.setZoom(desiredZoom);
       });
 
-      // 제주도 전체 마커 렌더
-      mockPlaces.forEach((p) => {
-        new AdvancedMarkerElement({
-          map,
+      // ✅ 개별 마커는 'map'에 직접 붙이지 말고 clusterer에만 넘긴다!
+      const baseMarkers = mockPlaces.map((p) => {
+        const html = renderToStaticMarkup(
+          <Icon name="streetLight" size={20} color="#FFD60A" />
+        );
+        const container = document.createElement("div");
+        container.innerHTML = html;
+
+        return new google.maps.marker.AdvancedMarkerElement({
           position: { lat: p.lat, lng: p.lng },
           title: p.name,
+          content: container.firstChild as HTMLElement,
         });
+      });
+      // 원하는 임계값 (원하는대로 조절 가능)
+      const CLUSTER_MAX_ZOOM = 10; // ← 이 줌을 넘어가면 개별 마커가 풀려서 보임
+      const CLUSTER_RADIUS_PX = 130; // 클러스터링 반경(픽셀). 숫자 키우면 더 뭉침
+
+      // 커스텀 렌더러 그대로 사용 (count 원 그리기)
+      const renderer: Renderer = {
+        render: ({ count, position }: Cluster) => {
+          const zoom = map.getZoom() ?? 10;
+          const circle = createClusterCircle(count, zoom);
+          const am = new google.maps.marker.AdvancedMarkerElement({
+            position,
+            content: circle,
+            zIndex: 1000 + Math.min(count, 999),
+          });
+          circle.onclick = () => {
+            map.panTo(position);
+            map.setZoom(Math.min((map.getZoom() ?? 10) + 2, 21));
+          };
+          return am;
+        },
+      };
+
+      // ✅ ‘minPoints: 1’이라 초기엔 단일 포인트도 전부 “클러스터 원”으로만 보임
+      clustererRef.current = new MarkerClusterer({
+        map,
+        markers: baseMarkers,
+        renderer,
+        algorithm: new SuperClusterAlgorithm({
+          minPoints: 1, // 단일 포인트도 클러스터 처리
+          maxZoom: CLUSTER_MAX_ZOOM, // 이 줌 이후엔 개별 마커로 풀림
+          radius: CLUSTER_RADIUS_PX,
+        }),
       });
     })();
   }, [ready]);
 
-  // 버튼 누르면 현재 위치 따라가기 + 주변 목데이터 찍기
+  // ---- 현재 위치 따라가기 + 주변 포인트는 clusterer에 추가 ----
   const startFollow = async () => {
     if (!mapRef.current) return;
 
@@ -106,6 +190,7 @@ export default function GoogleMapJejuFollow() {
       dot.style.borderRadius = "50%";
       dot.style.background = "#3B82F6";
       dot.style.border = "2px solid white";
+      dot.style.transform = "translate(-50%, -50%)";
       return dot;
     };
 
@@ -114,7 +199,7 @@ export default function GoogleMapJejuFollow() {
         (p) => {
           const here = { lat: p.coords.latitude, lng: p.coords.longitude };
 
-          // 현재 위치 마커
+          // 현재 위치 마커는 map에 직접 붙여도 OK (사용자 위치용이니 클러스터 제외)
           if (!myMarkerRef.current) {
             myMarkerRef.current = new AdvancedMarkerElement({
               map: mapRef.current!,
@@ -126,32 +211,25 @@ export default function GoogleMapJejuFollow() {
             myMarkerRef.current.position = here;
           }
 
-          // 지도 이동
-          mapRef.current!.moveCamera({
-            center: here,
-            zoom: 19, // 17~19 권장
-            tilt: 10, // 0~67.5 (최대)
-            //heading: 20, // 0~360
-          });
-
+          mapRef.current!.moveCamera({ center: here, zoom: 19, tilt: 10 });
           mapRef.current!.setTilt(67.5);
           mapRef.current!.setHeading(45);
 
-          // 현재 위치 주변 목데이터 마커 찍기
+          // 주변 포인트는 clusterer에만 추가!
           const nearMock: Place[] = nearbyPlaces.map((n, i) => ({
             ...n,
-            lat: here.lat + (Math.random() - 0.5) * 0.01, // 근처 랜덤 좌표
+            lat: here.lat + (Math.random() - 0.5) * 0.01,
             lng: here.lng + (Math.random() - 0.5) * 0.01,
             name: `주변 포인트 ${i + 1}`,
           }));
-
-          nearMock.forEach((p) => {
-            new AdvancedMarkerElement({
-              map: mapRef.current!,
-              position: { lat: p.lat, lng: p.lng },
-              title: p.name,
-            });
-          });
+          const newMarkers = nearMock.map(
+            (p2) =>
+              new google.maps.marker.AdvancedMarkerElement({
+                position: { lat: p2.lat, lng: p2.lng },
+                title: p2.name,
+              })
+          );
+          clustererRef.current?.addMarkers(newMarkers);
 
           setIsFollowing(true);
         },
@@ -173,7 +251,7 @@ export default function GoogleMapJejuFollow() {
 
       {/* 우측 상단 버튼 */}
       <button
-        onClick={() => console.log("Top Right")}
+        onClick={() => console.log("농장으로 가기")}
         style={{
           position: "absolute",
           right: 15,
@@ -192,7 +270,7 @@ export default function GoogleMapJejuFollow() {
         옵션
       </button>
 
-      {/* 하단 컨트롤 바: SpeedDial + 버튼2개 (한 줄) */}
+      {/* 하단 컨트롤 바 */}
       <div
         style={{
           position: "absolute",
@@ -202,11 +280,10 @@ export default function GoogleMapJejuFollow() {
           display: "flex",
           alignItems: "center",
           gap: 8,
-          zIndex: 9999, // 맵 위로
-          pointerEvents: "none", // 바깥 영역은 클릭 통과
+          zIndex: 9999,
+          pointerEvents: "none",
         }}
       >
-        {/* SpeedDial: 자신의 영역만 클릭 가능하게 */}
         <div style={{ pointerEvents: "auto" }}>
           <SpeedDial
             actions={[
@@ -229,9 +306,8 @@ export default function GoogleMapJejuFollow() {
           />
         </div>
 
-        {/* 버튼 1 */}
         <button
-          onClick={startFollow}
+          onClick={() => console.log("신고하기 모달")}
           style={{
             pointerEvents: "auto",
             padding: "10px 12px",
@@ -245,12 +321,11 @@ export default function GoogleMapJejuFollow() {
             marginLeft: 135,
           }}
         >
-          위치
+          신고
         </button>
 
-        {/* 버튼 2 (예시) */}
         <button
-          onClick={() => console.log("둘러보기")}
+          onClick={startFollow}
           style={{
             pointerEvents: "auto",
             width: 56,
