@@ -8,4 +8,5 @@ RUN pnpm install
 RUN pnpm run build
 
 EXPOSE 3000
-ENTRYPOINT [ "pnpm", "start" ]
+
+CMD [ "/bin", "sh", "-c", "source /app/env/config.env && pnpm start" ]
