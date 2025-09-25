@@ -6,16 +6,18 @@ import {
   PlusOutlineIcon,
   NoticeCircleIcon,
   CloseOutlineIcon,
+  PresetOutlineIcon,
 } from "@vapor-ui/icons";
 import { IconButton } from "@vapor-ui/core";
 import { Icon } from "../Icon/Icon";
 
 // 필요한 id를 명시적으로 유니온으로 두고(안정성↑), 그 외 문자열도 허용
+
 type BuiltInId = "star" | "cctv" | "notice";
 type SpeedDialAction = {
-  id: BuiltInId | (string & {}); // 커스텀 id도 가능
+  id: BuiltInId | (string & {});
   label?: string;
-  icon?: React.ReactNode; // 외부에서 아이콘 주면 그걸 우선 사용
+  icon?: React.ReactNode;
   onClick?: () => void;
 };
 
@@ -27,6 +29,9 @@ export function SpeedDial({
   style?: React.CSSProperties;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [selectedId, setSelectedId] = React.useState<
+    SpeedDialAction["id"] | null
+  >(null);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -34,7 +39,6 @@ export function SpeedDial({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 액션별 기본 아이콘 매핑
   const defaultIcons: Record<BuiltInId, React.ReactNode> = {
     star: <Icon name="star" width={24} height={24} />,
     cctv: <Icon name="cctv" width={24} height={24} />,
@@ -42,17 +46,22 @@ export function SpeedDial({
   };
 
   const getIconFor = (a: SpeedDialAction) => {
-    if (a.icon) return a.icon; // 외부 주입 아이콘 우선
+    if (a.icon) return a.icon;
     if ((["star", "cctv", "notice"] as const).includes(a.id as BuiltInId)) {
       return defaultIcons[a.id as BuiltInId];
     }
-    return null; // 아이콘 없을 수도 있음
+    return null;
+  };
+
+  const getSelectedIcon = () => {
+    if (!selectedId) return null;
+    const found = actions.find((a) => a.id === selectedId);
+    return found ? getIconFor(found) : null;
   };
 
   const delayKey = (idx: number) =>
     (["d0", "d1", "d2", "d3"] as const)[Math.min(idx, 3)];
 
-  // 공통 버튼 스타일
   const floatingBtnStyle: React.CSSProperties = {
     borderRadius: "50%",
     backdropFilter: "blur(8px)",
@@ -73,8 +82,9 @@ export function SpeedDial({
               variant="ghost"
               size="xl"
               onClick={() => {
+                setSelectedId(a.id); // ✅ 선택 아이콘 기억
                 a.onClick?.();
-                setOpen(false);
+                setOpen(false); // 닫기
               }}
               aria-label={a.label ?? String(a.id)}
               className={s.actionBtn({ open, delay: delayKey(idx) })}
@@ -95,15 +105,24 @@ export function SpeedDial({
         aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
         aria-pressed={open}
       >
-        {/* ← 아이콘 두 개를 겹쳐놓고 상태로 토글 */}
-        <span className={s.fabIconSwap}>
-          <span className={s.fabIcon({ kind: "plus", open })}>
-            <PlusOutlineIcon width={24} height={24} />
+        {/* 열렸을 때는 무조건 X, 닫혔을 때는 선택 아이콘 또는 + */}
+        {open ? (
+          <CloseOutlineIcon width={24} height={24} />
+        ) : getSelectedIcon() ? (
+          // ✅ 선택된 아이콘 표시
+          <span className={s.fabIconSwap}>
+            <span className={s.fabIcon({ kind: "plus", open: false })}>
+              {getSelectedIcon()}
+            </span>
           </span>
-          <span className={s.fabIcon({ kind: "close", open })}>
-            <CloseOutlineIcon width={24} height={24} />
+        ) : (
+          // 선택 전에는 + 아이콘
+          <span className={s.fabIconSwap}>
+            <span className={s.fabIcon({ kind: "plus", open: false })}>
+              <PresetOutlineIcon width={24} height={24} />
+            </span>
           </span>
-        </span>
+        )}
       </IconButton>
     </div>
   );
