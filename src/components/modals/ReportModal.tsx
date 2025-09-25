@@ -11,7 +11,7 @@ import {
 } from "./ReportModal.css";
 import { useState } from "react";
 import React from "react";
-import { Box, Button, Textarea, Flex } from "@vapor-ui/core";
+import { Box, Button, Textarea, Flex, InputGroup } from "@vapor-ui/core";
 import { HorongSuccess } from "../HorongSuccess/HorongSuccess";
 
 interface ReportModalProps {
@@ -134,7 +134,14 @@ export const ReportModal = ({
               justifyContent="center"
               width="100%"
             >
-              <Textarea placeholder="여러 줄 텍스트를 입력하세요..." />
+              <InputGroup.Root>
+                <Textarea
+                  placeholder="긴 텍스트를 입력하세요..."
+                  maxLength={200}
+                  rows={4}
+                />
+                <InputGroup.Counter />
+              </InputGroup.Root>
             </Box>
 
             {/* 버튼 */}
