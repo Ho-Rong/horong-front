@@ -165,7 +165,7 @@ export const ReportModal = ({
     const reportData: ReportData = {
       description,
       images: selectedImages,
-      location: currentLocation || MOCK_LOCATION,
+      location: MOCK_LOCATION,
     };
 
     try {
