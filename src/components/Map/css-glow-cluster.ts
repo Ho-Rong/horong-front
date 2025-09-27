@@ -34,6 +34,7 @@ export function createCssGlowCluster(
   requestAnimationFrame(() => (el.style.opacity = "1"));
 
   const core = document.createElement("div");
+  core.classList.add("point");
   core.style.position = "absolute";
   core.style.inset = "0";
   core.style.borderRadius = "50%";
