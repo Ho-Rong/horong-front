@@ -130,11 +130,20 @@ export function useLightsLayer(
         const tpl = document.createElement("template");
         tpl.innerHTML = customStreetLightSvg;
         const svgEl = tpl.content.firstElementChild as Element;
+        svgEl.classList.add("point");
+
+
+        const container = document.createElement("div")
+          container.style.width = "47 !important"
+          container.style.height = "47 !important"
+          container.classList.add("container")
+
+          container.append(svgEl)
 
         return new AdvancedMarkerElement({
           position: { lat: p.latitude, lng: p.longitude },
           title: "가로등",
-          content: svgEl,
+          content: container,
           zIndex: 2000,
         });
       }
